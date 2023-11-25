@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>splait</title>
+  </head>
+  <body>
+    <canvas id="canvas" class="full-screen pixelated"></canvas>
+    <div id="errors" className="full-screen"></div>
+    <div id="overlay" className="full-screen flex flex-col justify-between font-mono font-bold pointer-events-none overflow-hidden p-2">
+      <div>
+        <div id="debug" className="flex-col justify-start">
+          <div id="eye" className="shadow text-white"></div>
+          <div id="velocity" className="shadow text-white"></div>
+          <div id="look" className="shadow text-white"></div>
+          <div id="chunk" className="shadow text-white"></div>
+          <div id="frame" className="shadow text-white"></div>
+        </div>
+      </div>
+    </div>
+    <button id="record" class="absolute top-0 left-0 bg-white">Start recording</button>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
