@@ -282,8 +282,8 @@ export const generateWorldGaussians = () => {
   }
 
   // Wider world
-  const deltaAngle = Math.PI/100;
-  for (let d = 100; d < 10000; d *= 1.05) {
+  const deltaAngle = Math.PI/50;
+  for (let d = 100; d < 10000; d *= 1.1) {
     const scale = d*Math.tan(deltaAngle);
     for (let ang = 0; ang < 2*Math.PI; ang += deltaAngle) {
       const x = d*Math.cos(ang);
@@ -300,5 +300,6 @@ export const generateWorldGaussians = () => {
     }
   }
 
+  console.log(gaussianList.length);
   return gaussianList;
 };
