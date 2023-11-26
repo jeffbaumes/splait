@@ -4,7 +4,7 @@ import { mat4, vec3 } from 'gl-matrix';
 
 import gaussianShaderCode from "./gaussian.wgsl?raw";
 import { Mat4, PlayMode, RenderMode } from "./types";
-import { generateWorldGaussians } from "./world";
+import { World } from "./World";
 
 const WORKGROUP_SIZE = 64;
 
@@ -17,7 +17,6 @@ export class Renderer {
   crosshairBuffer: GPUBuffer | null = null;
   sortOffsetBuffer: GPUBuffer | null = null;
   gaussianBuffers: GPUBuffer[] | null = null;
-  gaussianList: number[][] = [];
   gaussianPipeline: GPURenderPipeline | null = null;
   crosshairPipeline: GPURenderPipeline | null = null;
   collideAllPipeline: GPUComputePipeline | null = null;
@@ -27,8 +26,10 @@ export class Renderer {
   targetPipeline: GPUComputePipeline | null = null;
   gaussianBindGroups: GPUBindGroup[] | null = null;
   canvasRecorder: any;
+  world: World;
 
   constructor(private canvas: HTMLCanvasElement) {
+    this.world = new World();
     this.setup();
   }
 
@@ -132,9 +133,9 @@ export class Renderer {
     });
     this.device.queue.writeBuffer(this.crosshairBuffer, 0, crosshairVertices);
 
-    this.gaussianList = generateWorldGaussians();
+    this.world.generateWorldGaussians();
 
-    const gaussians = new Float32Array(this.gaussianList.flat());
+    const gaussians = new Float32Array(this.world.gaussianList.flat());
     this.gaussianBuffers = [
       this.device.createBuffer({
         label: "Gaussian buffer A",
@@ -433,7 +434,13 @@ export class Renderer {
     // Copy to out buffer
     {
       const encoder = this.device.createCommandEncoder();
-      encoder.copyBufferToBuffer(this.gaussianBuffers[this.frame % 2], 0, this.gaussianBuffers[1 - (this.frame % 2)], 0, this.gaussianList.length * 6 * 4 * 4);
+      encoder.copyBufferToBuffer(
+        this.gaussianBuffers[this.frame % 2],
+        0,
+        this.gaussianBuffers[1 - (this.frame % 2)],
+        0,
+        this.world.gaussianList.length * 6 * 4 * 4
+      );
       this.device.queue.submit([encoder.finish()]);
     }
 
@@ -444,7 +451,7 @@ export class Renderer {
       const bubblesortPass = encoder.beginComputePass();
       bubblesortPass.setPipeline(this.bubblesortPipeline);
       bubblesortPass.setBindGroup(0, this.gaussianBindGroups[this.frame % 2]);
-      const bubblesortWorkgroupCount = Math.ceil(this.gaussianList.length / WORKGROUP_SIZE);
+      const bubblesortWorkgroupCount = Math.ceil(this.world.gaussianList.length / WORKGROUP_SIZE);
       bubblesortPass.dispatchWorkgroups(bubblesortWorkgroupCount);
       bubblesortPass.end();
       this.device.queue.submit([encoder.finish()]);
@@ -456,7 +463,7 @@ export class Renderer {
     const distancePass = encoder.beginComputePass();
     distancePass.setPipeline(this.distancePipeline);
     distancePass.setBindGroup(0, this.gaussianBindGroups[this.frame % 2]);
-    const distanceWorkgroupCount = Math.ceil(this.gaussianList.length / WORKGROUP_SIZE);
+    const distanceWorkgroupCount = Math.ceil(this.world.gaussianList.length / WORKGROUP_SIZE);
     distancePass.dispatchWorkgroups(distanceWorkgroupCount);
     distancePass.end();
 
@@ -471,7 +478,7 @@ export class Renderer {
     const collideAllPass = encoder.beginComputePass();
     collideAllPass.setPipeline(this.collideAllPipeline);
     collideAllPass.setBindGroup(0, this.gaussianBindGroups[this.frame % 2]);
-    const collideAllWorkgroupCount = Math.ceil(this.gaussianList.length / WORKGROUP_SIZE);
+    const collideAllWorkgroupCount = Math.ceil(this.world.gaussianList.length / WORKGROUP_SIZE);
     collideAllPass.dispatchWorkgroups(collideAllWorkgroupCount);
     collideAllPass.end();
 
@@ -479,7 +486,7 @@ export class Renderer {
     const computePass = encoder.beginComputePass();
     computePass.setPipeline(this.simulationPipeline);
     computePass.setBindGroup(0, this.gaussianBindGroups[this.frame % 2]);
-    const workgroupCount = Math.ceil(this.gaussianList.length / WORKGROUP_SIZE);
+    const workgroupCount = Math.ceil(this.world.gaussianList.length / WORKGROUP_SIZE);
     computePass.dispatchWorkgroups(workgroupCount);
     computePass.end();
 
@@ -496,7 +503,7 @@ export class Renderer {
     pass.setPipeline(this.gaussianPipeline);
     pass.setBindGroup(0, this.gaussianBindGroups[this.frame % 2]);
     pass.setVertexBuffer(0, this.vertexBuffer);
-    pass.draw(6, this.gaussianList.length);
+    pass.draw(6, this.world.gaussianList.length);
     pass.end();
 
     const crosshairPass = encoder.beginRenderPass({
