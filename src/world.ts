@@ -55,7 +55,7 @@ const createGaussian = ({position, color, scale, q, material}: {position: vec3, 
 
 
 export const generateWorldGaussians = () => {
-  const randomFunction = alea("0");
+  const randomFunction = alea(Math.random());
   const noise2D = createNoise2D(randomFunction);
 
   const gaussianList: number[][] = [];
