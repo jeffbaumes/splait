@@ -2,34 +2,48 @@ import { Recorder, RecorderStatus } from "canvas-record";
 import { AVC } from "media-codecs";
 import { mat4, vec3 } from 'gl-matrix';
 
-import gaussianShaderCode from "./gaussian.wgsl?raw";
+import gaussianShaderCode from "./gaussiancpu.wgsl?raw";
 import { Mat4, PlayMode, RenderMode } from "./types";
 import { World } from "./World";
 
-const WORKGROUP_SIZE = 64;
-
-export class Renderer {
-  frame = 0;
+export class RendererCPU {
   context: GPUCanvasContext | null = null;
   device: GPUDevice | null = null;
   uniformBuffer: GPUBuffer | null = null;
   vertexBuffer: GPUBuffer | null = null;
   crosshairBuffer: GPUBuffer | null = null;
-  sortOffsetBuffer: GPUBuffer | null = null;
-  gaussianBuffers: GPUBuffer[] | null = null;
+  gaussianBuffer: GPUBuffer | null = null;
   gaussianPipeline: GPURenderPipeline | null = null;
   crosshairPipeline: GPURenderPipeline | null = null;
-  collideAllPipeline: GPUComputePipeline | null = null;
-  simulationPipeline: GPUComputePipeline | null = null;
-  bubblesortPipeline: GPUComputePipeline | null = null;
-  distancePipeline: GPUComputePipeline | null = null;
-  targetPipeline: GPUComputePipeline | null = null;
-  gaussianBindGroups: GPUBindGroup[] | null = null;
+  gaussianBindGroup: GPUBindGroup | null = null;
   canvasRecorder: any;
   world: World;
+  sortWorker: Worker;
+  sorting = false;
+  simulating = false;
+  simulationDeltaTime = 0;
 
   constructor(private canvas: HTMLCanvasElement) {
     this.world = new World();
+    this.sortWorker = new Worker(new URL("./sortWorker.ts", import.meta.url), {
+      type: 'module',
+    });
+    this.sortWorker.onmessage = (e) => {
+      if (!this.device || !this.gaussianBuffer) {
+        return;
+      }
+
+      // console.time('flat');
+      // const gaussians = new Float32Array(e.data.flat());
+      // console.timeEnd('flat');
+
+      this.device.queue.writeBuffer(this.gaussianBuffer, 0, e.data.gaussians);
+      if (e.data.type === 'sort') {
+        this.sorting = false;
+      } else if (e.data.type === 'simulate') {
+        this.simulating = false;
+      }
+    };
     this.setup();
   }
 
@@ -134,21 +148,18 @@ export class Renderer {
     this.device.queue.writeBuffer(this.crosshairBuffer, 0, crosshairVertices);
 
     this.world.generateWorldGaussians();
+    this.sortWorker.postMessage({
+      type: "gaussians",
+      gaussianList: this.world.gaussianList,
+    });
 
     const gaussians = new Float32Array(this.world.gaussianList.flat());
-    this.gaussianBuffers = [
-      this.device.createBuffer({
-        label: "Gaussian buffer A",
-        size: gaussians.byteLength,
-        usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC,
-      }),
-      this.device.createBuffer({
-        label: "Gaussian buffer B",
-        size: gaussians.byteLength,
-        usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC,
-      }),
-    ];
-    this.device.queue.writeBuffer(this.gaussianBuffers[0], 0, gaussians);
+    this.gaussianBuffer = this.device.createBuffer({
+      label: "Gaussian buffer",
+      size: gaussians.byteLength,
+      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC,
+    });
+    this.device.queue.writeBuffer(this.gaussianBuffer, 0, gaussians);
     let uniformArray = new Float32Array([
       // force and deltaTime
       0, 0, 0, 0,
@@ -176,13 +187,6 @@ export class Renderer {
       code: gaussianShaderCode,
     });
 
-    this.sortOffsetBuffer = this.device.createBuffer({
-      label: "Sort offset uniform",
-      size: uniformArray.byteLength,
-      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
-    });
-    this.device.queue.writeBuffer(this.sortOffsetBuffer, 0, new Uint32Array([0]));
-
     const gaussianBindGroupLayout = this.device.createBindGroupLayout({
       label: "Gaussian bind group layout",
       entries: [
@@ -196,64 +200,23 @@ export class Renderer {
           visibility: GPUShaderStage.COMPUTE | GPUShaderStage.VERTEX,
           buffer: { type: "read-only-storage" as GPUBufferBindingType },
         },
+      ],
+    });
+  this.gaussianBindGroup = this.device.createBindGroup({
+      label: "Gaussian bind group",
+      layout: gaussianBindGroupLayout,
+      entries: [
         {
-          binding: 2,
-          visibility: GPUShaderStage.COMPUTE,
-          buffer: { type: "storage" as GPUBufferBindingType },
+          binding: 0,
+          resource: { buffer: this.uniformBuffer },
         },
         {
-          binding: 3,
-          visibility: GPUShaderStage.COMPUTE,
-          buffer: {},
+          binding: 1,
+          resource: { buffer: this.gaussianBuffer },
         },
       ],
     });
-    this.gaussianBindGroups = [
-      this.device.createBindGroup({
-        label: "Gaussian bind group A",
-        layout: gaussianBindGroupLayout,
-        entries: [
-          {
-            binding: 0,
-            resource: { buffer: this.uniformBuffer },
-          },
-          {
-            binding: 1,
-            resource: { buffer: this.gaussianBuffers[0] },
-          },
-          {
-            binding: 2,
-            resource: { buffer: this.gaussianBuffers[1] },
-          },
-          {
-            binding: 3,
-            resource: { buffer: this.sortOffsetBuffer },
-          },
-        ],
-      }),
-      this.device.createBindGroup({
-        label: "Gaussian bind group B",
-        layout: gaussianBindGroupLayout,
-        entries: [
-          {
-            binding: 0,
-            resource: { buffer: this.uniformBuffer },
-          },
-          {
-            binding: 1,
-            resource: { buffer: this.gaussianBuffers[1] },
-          },
-          {
-            binding: 2,
-            resource: { buffer: this.gaussianBuffers[0] },
-          },
-          {
-            binding: 3,
-            resource: { buffer: this.sortOffsetBuffer },
-          },
-        ],
-      }),
-    ];
+
     const pipelineLayout = this.device.createPipelineLayout({
       label: "Cell Pipeline Layout",
       bindGroupLayouts: [ gaussianBindGroupLayout ],
@@ -316,51 +279,6 @@ export class Renderer {
         }],
       },
     });
-
-    this.collideAllPipeline = this.device.createComputePipeline({
-      label: "Collide all pipeline",
-      layout: pipelineLayout,
-      compute: {
-        module: gaussianShaderModule,
-        entryPoint: "collideAll",
-      },
-    });
-
-    this.simulationPipeline = this.device.createComputePipeline({
-      label: "Simulation pipeline",
-      layout: pipelineLayout,
-      compute: {
-        module: gaussianShaderModule,
-        entryPoint: "simulate",
-      },
-    });
-
-    this.bubblesortPipeline = this.device.createComputePipeline({
-      label: "Bubblesort pipeline",
-      layout: pipelineLayout,
-      compute: {
-        module: gaussianShaderModule,
-        entryPoint: "bubblesort",
-      },
-    });
-
-    this.distancePipeline = this.device.createComputePipeline({
-      label: "Distance pipeline",
-      layout: pipelineLayout,
-      compute: {
-        module: gaussianShaderModule,
-        entryPoint: "distanceToEye",
-      },
-    });
-
-    this.targetPipeline = this.device.createComputePipeline({
-      label: "Target pipeline",
-      layout: pipelineLayout,
-      compute: {
-        module: gaussianShaderModule,
-        entryPoint: "findTarget",
-      },
-    });
   }
 
   async render(options: {
@@ -381,15 +299,9 @@ export class Renderer {
       !this.device ||
       !this.gaussianPipeline ||
       !this.crosshairPipeline ||
-      !this.gaussianBindGroups ||
-      !this.collideAllPipeline ||
-      !this.simulationPipeline ||
-      !this.bubblesortPipeline ||
-      !this.distancePipeline ||
-      !this.targetPipeline ||
+      !this.gaussianBindGroup ||
       !this.uniformBuffer ||
-      !this.sortOffsetBuffer ||
-      !this.gaussianBuffers ||
+      !this.gaussianBuffer ||
       !this.vertexBuffer
     ) {
       return;
@@ -399,9 +311,6 @@ export class Renderer {
     // const fovy = Math.PI / 4 + Math.PI / 8 * Math.cos(frame / 150);
     const fovy = Math.PI / 2;
     const tanFovy = 1 / Math.tan(fovy / 2);
-    eye[0] = 0;
-    eye[1] = 0;
-    eye[2] = 0;
     const lookAt: [number, number, number] = [eye[0] + look[0], eye[1] + look[1], eye[2] + look[2]];
     const uniformArray = new Float32Array([
       // Force on player for this frame and delta time
@@ -425,72 +334,31 @@ export class Renderer {
       playMode,
     ]);
 
-    // gaussianList.sort((a, b) => vec3.dist(eye, [a[4], a[5], a[6]]) - vec3.dist(eye, [b[4], b[5], b[6]]));
-    // const gaussians = new Float32Array(gaussianList.flat());
-    // device.queue.writeBuffer(gaussianBuffer, 0, gaussians);
-
     this.device.queue.writeBuffer(this.uniformBuffer, 0, uniformArray);
 
-    // Copy to out buffer
-    {
-      const encoder = this.device.createCommandEncoder();
-      encoder.copyBufferToBuffer(
-        this.gaussianBuffers[this.frame % 2],
-        0,
-        this.gaussianBuffers[1 - (this.frame % 2)],
-        0,
-        this.world.gaussianList.length * 6 * 4 * 4
-      );
-      this.device.queue.submit([encoder.finish()]);
-    }
+    // this.world.gaussianList.sort((a, b) => vec3.dist(eye, [a[4], a[5], a[6]]) - vec3.dist(eye, [b[4], b[5], b[6]]));
+    // const gaussians = new Float32Array(this.world.gaussianList.flat());
+    // this.device.queue.writeBuffer(this.gaussianBuffer, 0, gaussians);
 
-    // Perform some sorting passes
-    for (var sortIteration = 0; sortIteration < 200; sortIteration++) {
-      this.device.queue.writeBuffer(this.sortOffsetBuffer, 0, new Uint32Array([sortIteration % 2]));
-      const encoder = this.device.createCommandEncoder();
-      const bubblesortPass = encoder.beginComputePass();
-      bubblesortPass.setPipeline(this.bubblesortPipeline);
-      bubblesortPass.setBindGroup(0, this.gaussianBindGroups[this.frame % 2]);
-      const bubblesortWorkgroupCount = Math.ceil(this.world.gaussianList.length / WORKGROUP_SIZE);
-      bubblesortPass.dispatchWorkgroups(bubblesortWorkgroupCount);
-      bubblesortPass.end();
-      this.device.queue.submit([encoder.finish()]);
+    if (!this.sorting) {
+      this.sortWorker.postMessage({
+        type: "sort",
+        eye,
+      });
+      this.sorting = true;
+    }
+    this.simulationDeltaTime += deltaTime;
+    if (!this.simulating) {
+      this.sortWorker.postMessage({
+        type: "simulate",
+        deltaTime: this.simulationDeltaTime,
+        desiredVelocity,
+      });
+      this.simulating = true;
+      this.simulationDeltaTime = 0;
     }
 
     const encoder = this.device.createCommandEncoder();
-
-    // Compute distance to eye
-    const distancePass = encoder.beginComputePass();
-    distancePass.setPipeline(this.distancePipeline);
-    distancePass.setBindGroup(0, this.gaussianBindGroups[this.frame % 2]);
-    const distanceWorkgroupCount = Math.ceil(this.world.gaussianList.length / WORKGROUP_SIZE);
-    distancePass.dispatchWorkgroups(distanceWorkgroupCount);
-    distancePass.end();
-
-    // Find target
-    const targetPass = encoder.beginComputePass();
-    targetPass.setPipeline(this.targetPipeline);
-    targetPass.setBindGroup(0, this.gaussianBindGroups[this.frame % 2]);
-    targetPass.dispatchWorkgroups(1);
-    targetPass.end();
-
-    // Perform collision
-    const collideAllPass = encoder.beginComputePass();
-    collideAllPass.setPipeline(this.collideAllPipeline);
-    collideAllPass.setBindGroup(0, this.gaussianBindGroups[this.frame % 2]);
-    const collideAllWorkgroupCount = Math.ceil(this.world.gaussianList.length / WORKGROUP_SIZE);
-    collideAllPass.dispatchWorkgroups(collideAllWorkgroupCount);
-    collideAllPass.end();
-
-    // Perform simulation
-    const computePass = encoder.beginComputePass();
-    computePass.setPipeline(this.simulationPipeline);
-    computePass.setBindGroup(0, this.gaussianBindGroups[this.frame % 2]);
-    const workgroupCount = Math.ceil(this.world.gaussianList.length / WORKGROUP_SIZE);
-    computePass.dispatchWorkgroups(workgroupCount);
-    computePass.end();
-
-    this.frame += 1;
 
     const pass = encoder.beginRenderPass({
       colorAttachments: [{
@@ -501,7 +369,7 @@ export class Renderer {
       }],
     });
     pass.setPipeline(this.gaussianPipeline);
-    pass.setBindGroup(0, this.gaussianBindGroups[this.frame % 2]);
+    pass.setBindGroup(0, this.gaussianBindGroup);
     pass.setVertexBuffer(0, this.vertexBuffer);
     pass.draw(6, this.world.gaussianList.length);
     pass.end();
@@ -514,7 +382,7 @@ export class Renderer {
       }],
     });
     crosshairPass.setPipeline(this.crosshairPipeline);
-    crosshairPass.setBindGroup(0, this.gaussianBindGroups[this.frame % 2]);
+    crosshairPass.setBindGroup(0, this.gaussianBindGroup);
     crosshairPass.setVertexBuffer(0, this.crosshairBuffer);
     crosshairPass.draw(12);
     crosshairPass.end();

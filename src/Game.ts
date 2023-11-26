@@ -1,6 +1,7 @@
 import { vec3 } from "gl-matrix";
 
 import { Renderer } from "./Renderer";
+import { RendererCPU } from "./RendererCPU";
 import { PlayMode, RenderMode, Vec3 } from "./types";
 
 const vecToString = (x: number[] | Float32Array | null, digits: number = 0) => {
@@ -9,6 +10,11 @@ const vecToString = (x: number[] | Float32Array | null, digits: number = 0) => {
   }
   return [...x].map(d => d.toLocaleString(undefined, {minimumFractionDigits: digits, maximumFractionDigits: digits})).join(', ');
 };
+
+const getURLParameter = (name: string) => {
+  const url = new URL(window.location.href);
+  return url.searchParams.get(name);
+}
 
 export class Game {
   keys = {
@@ -26,6 +32,7 @@ export class Game {
   playerWidth = 0.5;
   playerSpeed = 15.0;
   playerDampen = 0.5;
+  playerVelocity = vec3.fromValues(0, 0, 0);
   wantsToJump = false;
   wantsToCollect = false;
   wantsToBuild = false;
@@ -50,13 +57,14 @@ export class Game {
   up = vec3.fromValues(0, 1, 0);
   pixelSize = 1;
   frame = '...............................................';
-  renderer: Renderer;
+  renderer: Renderer | RendererCPU;
 
   constructor(private canvas: HTMLCanvasElement) {
     if (!this.canvas) {
       throw 'Could not find canvas!';
     }
-    this.renderer = new Renderer(this.canvas);
+    const sim = getURLParameter('sim');
+    this.renderer = sim === 'gpu' ? new Renderer(this.canvas) : new RendererCPU(this.canvas);
     this.focus();
 
     const debugDiv = document.querySelector<HTMLDivElement>("#debug");
@@ -194,6 +202,23 @@ export class Game {
       //     this.wantsToJump = false;
       //   }
       // }
+
+      // Update velocity
+      this.playerVelocity[0] = 0.8*desiredVelocity[0] + 0.2*this.playerVelocity[0];
+      if (this.playMode == PlayMode.Fly || desiredVelocity[1] !== 0) {
+        this.playerVelocity[1] = 0.8*desiredVelocity[1] + 0.2*this.playerVelocity[1];
+      }
+      this.playerVelocity[2] = 0.8*desiredVelocity[2] + 0.2*this.playerVelocity[2];
+
+      // Update position
+      this.eye[0] += this.playerVelocity[0] * deltaTime;
+      this.eye[1] += this.playerVelocity[1] * deltaTime;
+      this.eye[2] += this.playerVelocity[2] * deltaTime;
+
+      // Gravity
+      if (this.playMode === PlayMode.Normal) {
+        this.playerVelocity[1] += this.gravity * deltaTime;
+      }
 
       this.renderer.render({
         look: this.look,

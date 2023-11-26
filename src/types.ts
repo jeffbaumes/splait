@@ -16,3 +16,9 @@ export enum PlayMode {
   Fly = 1,
 };
 
+export enum Material {
+  Immovable = 0,
+  Movable = 1,
+  Permeable = 2,
+};
+
