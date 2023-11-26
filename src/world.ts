@@ -55,7 +55,7 @@ const createGaussian = ({position, color, scale, q, material}: {position: vec3, 
 
 
 export const generateWorldGaussians = () => {
-  const randomFunction = alea("");
+  const randomFunction = alea("0");
   const noise2D = createNoise2D(randomFunction);
 
   const gaussianList: number[][] = [];
@@ -66,7 +66,7 @@ export const generateWorldGaussians = () => {
   const groundHeight = (x: number, z: number) => {
     // return 0;
     // return noise2D(x / 1000, z / 1000) * 100;
-    let f = 1/100000;
+    let f = 1/10000;
     var fbm = noise2D(x * f, z * f);
     f *= 2; x += 32;
     fbm += noise2D(x * f, z * f) * 0.5;
@@ -76,7 +76,7 @@ export const generateWorldGaussians = () => {
     fbm += noise2D(x * f, z * f) * 0.125;
     f *= 2; x += 824;
     fbm += noise2D(x * f, z * f) * 0.065;
-    return fbm*500;
+    return fbm*300;
     // const hillFreqency = 10;
     // return 0.75*hillFreqency*Math.sin(x / hillFreqency) * Math.sin(z / hillFreqency);
   };
@@ -84,22 +84,25 @@ export const generateWorldGaussians = () => {
   const groundColor = (y: number) => {
     // return [0.1, 0.3, 0.1];
     // const shade = 0.9 + Math.random()*0.1;
-    y = y / 100;
+    y = y / 150 + 2;
     const colorAltitudes = [
       {altitude: 0, color: [0.4, 0.8, 1.0]},
       {altitude: 1, color: [0.4, 0.8, 0.4]},
       {altitude: 2, color: [0.5, 0.7, 0.4]},
-      {altitude: 3, color: [0.8, 0.9, 0.6]},
+      {altitude: 3, color: [0.8, 0.8, 0.5]},
       {altitude: 4, color: [0.8, 0.8, 0.8]},
       {altitude: 5, color: [1.0, 1.0, 1.0]},
     ];
     for (let i = 0; i < colorAltitudes.length - 1; i++) {
       if (y < colorAltitudes[i].altitude) {
-        const a = colorAltitudes[i].altitude;
-        const b = colorAltitudes[i + 1].altitude;
+        if (i === 0) {
+          return [...colorAltitudes[0].color, 1] as Vec4;
+        }
+        const a = colorAltitudes[i - 1].altitude;
+        const b = colorAltitudes[i].altitude;
         const c = (y - a) / (b - a);
-        const colorA = colorAltitudes[i].color;
-        const colorB = colorAltitudes[i + 1].color;
+        const colorA = colorAltitudes[i - 1].color;
+        const colorB = colorAltitudes[i].color;
         return [
           (1 - c) * colorA[0] + c * colorB[0],
           (1 - c) * colorA[1] + c * colorB[1],
@@ -146,9 +149,11 @@ export const generateWorldGaussians = () => {
         height - 2*groundScale,
         z,
       ];
+      const c = groundColor(height);
+      const shade = Math.random();
       gaussianList.push(createGaussian({
         position,
-        color: groundColor(height),
+        color: [0.3*shade + 0.7*c[0], 0.3*shade + 0.7*c[1], 0.3*shade + 0.7*c[2], c[3]],
         scale: [groundScale, groundScale, groundScale],
         q,
         material: Material.Immovable,
@@ -277,8 +282,8 @@ export const generateWorldGaussians = () => {
   }
 
   // Wider world
-  const deltaAngle = Math.PI/50;
-  for (let d = 100; d < 100000; d *= 1.1) {
+  const deltaAngle = Math.PI/100;
+  for (let d = 100; d < 10000; d *= 1.05) {
     const scale = d*Math.tan(deltaAngle);
     for (let ang = 0; ang < 2*Math.PI; ang += deltaAngle) {
       const x = d*Math.cos(ang);

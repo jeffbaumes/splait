@@ -24,7 +24,7 @@ export class Game {
   playerCorner = 0.1;
   nudgeDistance = 0.01;
   playerWidth = 0.5;
-  playerSpeed = 1000.0;
+  playerSpeed = 15.0;
   playerDampen = 0.5;
   wantsToJump = false;
   wantsToCollect = false;
@@ -119,6 +119,8 @@ export class Game {
         }
       } else if (event.code === 'KeyM') {
         this.renderMode = this.renderMode === RenderMode.Gaussian ? RenderMode.Flat : RenderMode.Gaussian;
+      } else if (event.code === 'KeyV') {
+        this.playerSpeed = this.playerSpeed === 15 ? 1000 : 15;
       } else if (event.code === 'Minus') {
         this.pixelSize += 1;
         resizeCanvas();
@@ -153,12 +155,6 @@ export class Game {
       this.frame += deltaTime < 0.02 ? '.' : (deltaTime < 0.03 ? 'o' : 'O');
       this.frame = this.frame.slice(1);
       frameDiv.innerText = this.frame;
-
-      // while (deltaTime > 1.1/60.0) {
-      //   this.movePlayer(1.1/60.0);
-      //   deltaTime -= 1.1/60.0;
-      // }
-      // this.movePlayer(deltaTime);
 
       const desiredVelocity: Vec3 = [0, 0, 0];
       if (this.keys.KeyD) {
@@ -233,69 +229,4 @@ export class Game {
       this.canvas.requestPointerLock();
     }
   }
-
-  // movePlayer(dt: number) {
-  //   const dv = dt * this.playerAcceleration;
-  //   if (this.keys.KeyD) {
-  //     this.rightVelocity = Math.min(this.rightVelocity + dv, this.playerSpeed);
-  //   }
-  //   if (this.keys.KeyA) {
-  //     this.rightVelocity = Math.max(this.rightVelocity - dv, -this.playerSpeed);
-  //   }
-  //   if (!this.keys.KeyD && !this.keys.KeyA) {
-  //     this.rightVelocity = Math.sign(this.rightVelocity)*Math.max(Math.abs(this.rightVelocity) - dv, 0.0);
-  //   }
-
-  //   if (this.keys.KeyW) {
-  //     this.forwardVelocity = Math.min(this.forwardVelocity + dv, this.playerSpeed);
-  //   }
-  //   if (this.keys.KeyS) {
-  //     this.forwardVelocity = Math.max(this.forwardVelocity - dv, -this.playerSpeed);
-  //   }
-  //   if (!this.keys.KeyW && !this.keys.KeyS) {
-  //     this.forwardVelocity = Math.sign(this.forwardVelocity)*Math.max(Math.abs(this.forwardVelocity) - dv, 0.0);
-  //   }
-
-  //   if (this.playMode === PlayMode.Fly) {
-  //     if (this.keys.Space) {
-  //       this.upVelocity = Math.min(this.upVelocity + dv, this.playerSpeed);
-  //     }
-  //     if (this.keys.ShiftLeft) {
-  //       this.upVelocity = Math.max(this.upVelocity - dv, -this.playerSpeed);
-  //     }
-  //     if (!this.keys.Space && !this.keys.ShiftLeft) {
-  //       this.upVelocity = Math.sign(this.upVelocity)*Math.max(Math.abs(this.upVelocity) - dv, 0.0);
-  //     }
-  //   } else if (this.playMode === PlayMode.Normal) {
-  //     if (!this.onGround) {
-  //       this.upVelocity = Math.max(this.upVelocity + dt * this.gravity, -this.fallSpeed);
-  //     }
-  //     if (this.keys.Space) {
-  //       if (this.onGround) {
-  //         this.upVelocity = this.jumpVelocity;
-  //         this.onGround = false;
-  //       }
-  //     }
-  //   }
-
-  //   const distanceEstimate = dt*Math.max(Math.abs(this.rightVelocity), Math.abs(this.forwardVelocity), Math.abs(this.upVelocity));
-  //   const steps = Math.floor(distanceEstimate / (0.5*this.playerCorner)) + 1;
-  //   const ddt = dt / steps;
-  //   for (let step = 0; step < steps; step += 1) {
-  //     const rightMovement = vec3.clone(this.right);
-  //     vec3.scale(rightMovement, rightMovement, ddt*this.rightVelocity);
-
-  //     const forwardMovement = vec3.clone(this.forward);
-  //     vec3.scale(forwardMovement, forwardMovement, ddt*this.forwardVelocity);
-
-  //     const upMovement = vec3.clone(this.up);
-  //     vec3.scale(upMovement, upMovement, ddt*this.upVelocity);
-
-  //     vec3.zero(this.movement);
-  //     vec3.add(this.movement, this.movement, rightMovement);
-  //     vec3.add(this.movement, this.movement, forwardMovement);
-  //     vec3.add(this.movement, this.movement, upMovement);
-  //     vec3.add(this.eye, this.eye, this.movement);
-  //   }
-  // }
 };
