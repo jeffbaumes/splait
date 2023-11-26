@@ -53,7 +53,6 @@ enum State {
 
 const MaxSimulationDistance = 25.;
 const MaxObjectSize = 1.;
-const EyeHeight = 2.;
 
 onmessage = (e) => {
   if (e.data.type === 'gaussians') {
