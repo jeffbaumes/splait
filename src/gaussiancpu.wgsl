@@ -102,13 +102,6 @@ fn viewportPosition(gaussian: Gaussian, pos: vec2f) -> vec4f {
 @vertex
 fn vertexMain(vertex: VertexInput) -> VertexOutput  {
   var output: VertexOutput;
-
-  // Don't draw player
-  if (vertex.instance == 0u) {
-    output.viewportPos = vec4(0.0, 0.0, 2.0, 1.0);
-    return output;
-  }
-
   var gaussian = gaussians[vertex.instance];
 
   // Don't draw objects that are in the inventory
@@ -125,6 +118,9 @@ fn vertexMain(vertex: VertexInput) -> VertexOutput  {
   } else if (gaussian.centerAndDistance.w >= MaxSimulationDistance) {
     var gray = vec3(0.299*gaussian.color.r + 0.587*gaussian.color.g + 0.114*gaussian.color.b);
     output.color = vec4f(0.7*gaussian.color.rgb + 0.0*gray, gaussian.color.a);
+    var fog = 1. - exp(-gaussian.centerAndDistance.w / 10000.);
+    var fogColor = vec4(1., 1., 1., 1.);
+    output.color = output.color * (1. - fog) + fogColor * fog;
     // output.color = vec4f(0.0*gaussian.color.rgb + 1.0*gray, gaussian.color.a);
   } else {
     output.color = gaussian.color;

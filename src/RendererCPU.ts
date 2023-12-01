@@ -20,8 +20,12 @@ export class RendererCPU {
   world: World;
   sortWorker: Worker;
   sorting = false;
+  sortEye: vec3 = [0., 0., 0.];
+  simWorker: Worker;
   simulating = false;
   simulationDeltaTime = 0;
+  latestSimulateGaussianList: number[][] = [];
+  merging = false;
 
   constructor(private canvas: HTMLCanvasElement) {
     this.world = new World();
@@ -32,16 +36,45 @@ export class RendererCPU {
       if (!this.device || !this.gaussianBuffer) {
         return;
       }
-
-      // console.time('flat');
-      // const gaussians = new Float32Array(e.data.flat());
-      // console.timeEnd('flat');
-
-      this.device.queue.writeBuffer(this.gaussianBuffer, 0, e.data.gaussians);
       if (e.data.type === 'sort') {
         this.sorting = false;
-      } else if (e.data.type === 'simulate') {
+        this.merging = true;
+        this.sortEye = e.data.eye; // We want to simulate with the same eye as we sorted with
+        if (!this.simulating) {
+          this.sortWorker.postMessage({
+            type: "merge",
+            gaussianList: this.latestSimulateGaussianList,
+          });
+        }
+      } else if (e.data.type === 'merge') {
+        this.device.queue.writeBuffer(this.gaussianBuffer, 0, e.data.gaussians);
+        this.simWorker.postMessage({
+          type: "merge",
+          gaussianList: e.data.gaussianList,
+          eye: this.sortEye,
+        });
+      }
+    };
+
+    this.simWorker = new Worker(new URL("./simWorker.ts", import.meta.url), {
+      type: 'module',
+    });
+    this.simWorker.onmessage = (e) => {
+      if (!this.device || !this.gaussianBuffer) {
+        return;
+      }
+      if (e.data.type === 'simulate') {
+        this.latestSimulateGaussianList = e.data.gaussianList;
+        this.device.queue.writeBuffer(this.gaussianBuffer, 0, e.data.gaussians);
+        if (this.merging) {
+          this.sortWorker.postMessage({
+            type: "merge",
+            gaussianList: e.data.gaussianList,
+          });
+        }
         this.simulating = false;
+      } else if (e.data.type === 'merge') {
+        this.merging = false;
       }
     };
     this.setup();
@@ -340,7 +373,7 @@ export class RendererCPU {
     // const gaussians = new Float32Array(this.world.gaussianList.flat());
     // this.device.queue.writeBuffer(this.gaussianBuffer, 0, gaussians);
 
-    if (!this.sorting) {
+    if (!this.sorting && !this.merging) {
       this.sortWorker.postMessage({
         type: "sort",
         eye,
@@ -348,11 +381,12 @@ export class RendererCPU {
       this.sorting = true;
     }
     this.simulationDeltaTime += deltaTime;
-    if (!this.simulating) {
-      this.sortWorker.postMessage({
+    if (!this.simulating && !this.merging) {
+      this.simWorker.postMessage({
         type: "simulate",
-        deltaTime: this.simulationDeltaTime,
+        deltaTime: Math.min(this.simulationDeltaTime, 0.1),
         desiredVelocity,
+        eye,
       });
       this.simulating = true;
       this.simulationDeltaTime = 0;

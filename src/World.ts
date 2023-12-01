@@ -1,12 +1,34 @@
-import { mat3, quat, vec3, vec4 } from "gl-matrix";
+import { mat3, quat, vec2, vec3, vec4 } from "gl-matrix";
 import alea from 'alea';
 import { createNoise2D } from 'simplex-noise';
 
-import { Mat3, Material, Vec3, Vec4 } from "./types";
+import { Mat3, Material, Vec2, Vec3, Vec4 } from "./types";
+
+const randomPointInCircle = (center: vec2, radius: number): Vec2 => {
+  const r = radius * Math.sqrt(Math.random());
+  const theta = 2 * Math.PI * Math.random();
+  return [
+    center[0] + r * Math.cos(theta),
+    center[1] + r * Math.sin(theta),
+  ];
+};
+
+const randomPointInSphere = (center: vec3, radius: number): Vec3 => {
+  const r = radius * Math.pow(Math.random(), 1/3);
+  const theta = 2 * Math.PI * Math.random();
+  const phi = Math.acos(2 * Math.random() - 1);
+  return [
+    center[0] + r * Math.sin(phi) * Math.cos(theta),
+    center[1] + r * Math.sin(phi) * Math.sin(theta),
+    center[2] + r * Math.cos(phi),
+  ];
+};
 
 export class World {
 
   gaussianList: number[][] = [];
+
+  currentGaussianID = 0;
 
   createGaussian({position, color, scale, q, material}: {position: vec3, color: vec4, scale: vec3, q: quat, material: Material}) {
     let R = mat3.fromQuat(new Array(9) as Mat3, q);
@@ -31,6 +53,9 @@ export class World {
     covB[1] = M[1] * M[2] + M[4] * M[5] + M[7] * M[8];
     covB[2] = M[2] * M[2] + M[5] * M[5] + M[8] * M[8];
 
+    const id = this.currentGaussianID;
+    this.currentGaussianID += 1;
+
     return [
       // Color rgba
       ...(color as number[]),
@@ -39,18 +64,15 @@ export class World {
       // Size xyz and padding
       ...(scale as number[]), 0,
       // Covariance matrix
-      // 0  1  2  padding
+      // 0  1  2  ID
       //    3  4
-      //       5
-      ...covA, 0,
+      //       5  padding
+      ...covA, id,
       ...covB, 0,
       // Velocity and material
       0, 0, 0, material,
     ];
   }
-
-  // Function to return a realistic color based on altitude in meters
-
 
   generateWorldGaussians() {
     const randomFunction = alea(Math.random());
@@ -58,8 +80,8 @@ export class World {
 
     const gaussianList: number[][] = [];
 
-    const generateDistance = 100;
-    const groundSpacing = 1.5;
+    const generateDistance = 200;
+    const groundSpacing = 1.0;
     const groundScale = 1.0;
     const groundHeight = (x: number, z: number) => {
       // return 0;
@@ -75,13 +97,9 @@ export class World {
       f *= 2; x += 824;
       fbm += noise2D(x * f, z * f) * 0.065;
       return fbm*300;
-      // const hillFreqency = 10;
-      // return 0.75*hillFreqency*Math.sin(x / hillFreqency) * Math.sin(z / hillFreqency);
     };
 
     const groundColor = (y: number) => {
-      // return [0.1, 0.3, 0.1];
-      // const shade = 0.9 + Math.random()*0.1;
       y = y / 150 + 2;
       const colorAltitudes = [
         {altitude: 0, color: [0.4, 0.8, 1.0]},
@@ -125,8 +143,7 @@ export class World {
     for (let i = 0; i < 1000; i++) {
       const color: Vec4 = [0.1*Math.random(), 0.3 + 0.6*Math.random(), 0.1*Math.random(), 1];
       const height = 0.2 + 0.2 * Math.random();
-      const x = generateDistance*(2*Math.random() - 1);
-      const z = generateDistance*(2*Math.random() - 1);
+      const [x, z] = randomPointInCircle([0, 0], generateDistance);
       const position: Vec3 = [
         x,
         1.5*height + groundHeight(x, z),
@@ -140,6 +157,9 @@ export class World {
     // Ground
     for (let x = -generateDistance; x <= generateDistance; x += groundSpacing) {
       for (let z = -generateDistance; z <= generateDistance; z += groundSpacing) {
+        if (x**2 + z**2 > generateDistance**2) {
+          continue;
+        }
         const q = quat.fromEuler([0, 0, 0, 0], 0, 0, 0);
         const height = groundHeight(x, z);
         const position: Vec3 = [
@@ -151,7 +171,7 @@ export class World {
         const shade = Math.random();
         gaussianList.push(this.createGaussian({
           position,
-          color: [0.3*shade + 0.7*c[0], 0.3*shade + 0.7*c[1], 0.3*shade + 0.7*c[2], c[3]],
+          color: [0.1*shade + 0.9*c[0], 0.1*shade + 0.9*c[1], 0.1*shade + 0.9*c[2], c[3]],
           scale: [groundScale, groundScale, groundScale],
           q,
           material: Material.Immovable,
@@ -163,8 +183,7 @@ export class World {
 
     // Trees
     for (var i = 0; i < 100; i += 2) {
-      const x = generateDistance*(2*Math.random() - 1);
-      const z = generateDistance*(2*Math.random() - 1);
+      const [x, z] = randomPointInCircle([0, 0], generateDistance);
       const p = [
         x,
         groundHeight(x, z),
@@ -187,16 +206,7 @@ export class World {
 
       // Leaves
       for (let i = 0; i < 50; i++) {
-        const pos: Vec3 = [
-          2*Math.random() - 1,
-          2*Math.random() - 1,
-          2*Math.random() - 1,
-        ];
-        while (vec3.squaredLength(pos) > 1) {
-          pos[0] = 2*Math.random() - 1;
-          pos[1] = 2*Math.random() - 1;
-          pos[2] = 2*Math.random() - 1;
-        }
+        const pos = randomPointInSphere([0, 0, 0], 1)
         gaussianList.push(this.createGaussian({
           position: [p[0] + 5*pos[0], p[1] + 15 + 5*pos[1], p[2] + 5*pos[2]],
           color: [0.3 + 0.5*Math.random(), 0.2 + 0.6*Math.random(), 0.1*Math.random(), 1],
@@ -208,10 +218,11 @@ export class World {
     }
 
     // Wider world
-    const deltaAngle = Math.PI/50;
-    for (let d = 100; d < 10000; d *= 1.1) {
-      const scale = d*Math.tan(deltaAngle);
-      for (let ang = 0; ang < 2*Math.PI; ang += deltaAngle) {
+    const deltaAngle = 2*Math.PI/400;
+    let scale = generateDistance*Math.tan(deltaAngle);
+    for (let d = generateDistance; d < 100000; d += 2*scale) {
+      scale = d*Math.tan(deltaAngle)/2;
+      for (let ang = 0; ang < 2*Math.PI - deltaAngle/2; ang += deltaAngle) {
         const x = d*Math.cos(ang);
         const z = d*Math.sin(ang);
         let y = groundHeight(x, z);
