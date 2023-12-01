@@ -3,8 +3,10 @@ import { AVC } from "media-codecs";
 import { mat4, vec3 } from 'gl-matrix';
 
 import gaussianShaderCode from "./gaussiancpu.wgsl?raw";
-import { Mat4, PlayMode, RenderMode } from "./types";
+import { G, Mat4, PlayMode, RenderMode } from "./types";
 import { World } from "./World";
+
+const GaussiansToGPUPerFrame = 50000;
 
 export class RendererCPU {
   context: GPUCanvasContext | null = null;
@@ -26,6 +28,8 @@ export class RendererCPU {
   simulationDeltaTime = 0;
   latestSimulateGaussianList: number[][] = [];
   merging = false;
+  gaussiansToSend: Float32Array | null = null;
+  gaussiansSent = 0;
 
   constructor(private canvas: HTMLCanvasElement) {
     this.world = new World();
@@ -47,7 +51,9 @@ export class RendererCPU {
           });
         }
       } else if (e.data.type === 'merge') {
-        this.device.queue.writeBuffer(this.gaussianBuffer, 0, e.data.gaussians);
+        // this.device.queue.writeBuffer(this.gaussianBuffer, 0, e.data.gaussians);
+        this.gaussiansToSend = e.data.gaussians;
+        this.gaussiansSent = 0;
         this.simWorker.postMessage({
           type: "merge",
           gaussianList: e.data.gaussianList,
@@ -368,6 +374,14 @@ export class RendererCPU {
     ]);
 
     this.device.queue.writeBuffer(this.uniformBuffer, 0, uniformArray);
+
+    // If there are gaussians to send, send them
+    if (this.gaussiansToSend && this.gaussiansSent < this.gaussiansToSend.length / G.Stride) {
+      const offset = this.gaussiansSent * G.Stride;
+      const size = Math.min(GaussiansToGPUPerFrame, this.gaussiansToSend.length / G.Stride - this.gaussiansSent) * G.Stride;
+      this.device.queue.writeBuffer(this.gaussianBuffer, offset*4, this.gaussiansToSend, offset, size);
+      this.gaussiansSent += GaussiansToGPUPerFrame;
+    }
 
     // this.world.gaussianList.sort((a, b) => vec3.dist(eye, [a[4], a[5], a[6]]) - vec3.dist(eye, [b[4], b[5], b[6]]));
     // const gaussians = new Float32Array(this.world.gaussianList.flat());

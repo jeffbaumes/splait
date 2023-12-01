@@ -80,7 +80,7 @@ export class World {
 
     const gaussianList: number[][] = [];
 
-    const generateDistance = 200;
+    const generateDistance = 400;
     const groundSpacing = 1.0;
     const groundScale = 1.0;
     const groundHeight = (x: number, z: number) => {

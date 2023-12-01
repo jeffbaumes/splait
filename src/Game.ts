@@ -235,9 +235,9 @@ export class Game {
       this.wantsToBuild = false;
 
       requestAnimationFrame(render);
-      eyeDiv.innerText = `pos ${vecToString(this.eye, 2)}`;
-      velocityDiv.innerText = `ground ${this.onGround ? 1 : 0} vel ${vecToString([this.rightVelocity, this.upVelocity, this.forwardVelocity], 2)}`;
-      lookDiv.innerText = `loo  ${vecToString(this.look, 2)}`;
+      // eyeDiv.innerText = `pos ${vecToString(this.eye, 2)}`;
+      // velocityDiv.innerText = `ground ${this.onGround ? 1 : 0} vel ${vecToString([this.rightVelocity, this.upVelocity, this.forwardVelocity], 2)}`;
+      // lookDiv.innerText = `loo  ${vecToString(this.look, 2)}`;
     }
     requestAnimationFrame(render);
   }
