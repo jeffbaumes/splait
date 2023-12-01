@@ -4,12 +4,12 @@ import { Renderer } from "./Renderer";
 import { RendererCPU } from "./RendererCPU";
 import { PlayMode, RenderMode, Vec3 } from "./types";
 
-const vecToString = (x: number[] | Float32Array | null, digits: number = 0) => {
-  if (!x) {
-    return 'null';
-  }
-  return [...x].map(d => d.toLocaleString(undefined, {minimumFractionDigits: digits, maximumFractionDigits: digits})).join(', ');
-};
+// const vecToString = (x: number[] | Float32Array | null, digits: number = 0) => {
+//   if (!x) {
+//     return 'null';
+//   }
+//   return [...x].map(d => d.toLocaleString(undefined, {minimumFractionDigits: digits, maximumFractionDigits: digits})).join(', ');
+// };
 
 const getURLParameter = (name: string) => {
   const url = new URL(window.location.href);
