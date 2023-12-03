@@ -1,6 +1,8 @@
 import { mat3, quat, vec2, vec3, vec4 } from "gl-matrix";
 import alea from 'alea';
 import { createNoise2D } from 'simplex-noise';
+// https://github.com/frostoven/BSC5P-JSON-XYZ/tree/primary
+import stars from './bsc5p_3d.json';
 
 import { Mat3, Material, Vec2, Vec3, Vec4 } from "./types";
 
@@ -80,7 +82,7 @@ export class World {
 
     const gaussianList: number[][] = [];
 
-    const generateDistance = 400;
+    const generateDistance = 200;
     const groundSpacing = 1.0;
     const groundScale = 1.0;
     const groundHeight = (x: number, z: number) => {
@@ -139,6 +141,29 @@ export class World {
       material: Material.Movable,
     }));
 
+    const q = quat.fromEuler([0, 0, 0, 0], 0, 0, 0);
+
+    // Stars
+    // const parsec = 3.086e+16;
+    const parsec = 3.086e+8;
+    let totalBrightness = 0;
+    stars.forEach((star) => {
+      if (!star.x || !star.y || !star.z || !star.K) {
+        return;
+      }
+      const brightness = 500 * star.N / (star.p**2 * 4 * Math.PI);
+      totalBrightness += brightness;
+      gaussianList.push(this.createGaussian({
+        position: [parsec * star.x, parsec * star.y, parsec * star.z],
+        // color: [brightness * (star.K.r ?? 1), brightness * (star.K.g ?? 1), brightness * (star.K.b ?? 1), 1],
+        color: [star.K.r ?? 1, star.K.g ?? 1, star.K.b ?? 1, brightness],
+        scale: [1, 1, 1],
+        q,
+        material: Material.Star,
+      }));
+    });
+    console.log('totalBrightness', totalBrightness / stars.length);
+
     // Grass
     for (let i = 0; i < 1000; i++) {
       const color: Vec4 = [0.1*Math.random(), 0.3 + 0.6*Math.random(), 0.1*Math.random(), 1];
@@ -160,7 +185,6 @@ export class World {
         if (x**2 + z**2 > generateDistance**2) {
           continue;
         }
-        const q = quat.fromEuler([0, 0, 0, 0], 0, 0, 0);
         const height = groundHeight(x, z);
         const position: Vec3 = [
           x,
@@ -179,10 +203,9 @@ export class World {
       }
     }
 
-    const q = quat.fromEuler([0, 0, 0, 0], 0, 0, 0);
 
     // Trees
-    for (var i = 0; i < 100; i += 2) {
+    for (var i = 0; i < 20; i += 2) {
       const [x, z] = randomPointInCircle([0, 0], generateDistance);
       const p = [
         x,
@@ -218,9 +241,9 @@ export class World {
     }
 
     // Wider world
-    const deltaAngle = 2*Math.PI/400;
+    const deltaAngle = 2*Math.PI/800;
     let scale = generateDistance*Math.tan(deltaAngle);
-    for (let d = generateDistance; d < 100000; d += 2*scale) {
+    for (let d = generateDistance; d < 10000; d += 2*scale) {
       scale = d*Math.tan(deltaAngle)/2;
       for (let ang = 0; ang < 2*Math.PI - deltaAngle/2; ang += deltaAngle) {
         const x = d*Math.cos(ang);

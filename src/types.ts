@@ -21,6 +21,7 @@ export enum Material {
   Immovable = 0,
   Movable = 1,
   Permeable = 2,
+  Star = 3,
 };
 
 // // Color rgba

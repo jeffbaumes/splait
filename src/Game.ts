@@ -49,6 +49,8 @@ export class Game {
   onGround = false;
   playMode = PlayMode.Fly;
   renderMode = RenderMode.Gaussian;
+  hour = 0;
+  secondsPerDay = 1*60;
   movement = vec3.fromValues(0, 0, 0);
   forward = vec3.fromValues(0, 0, -1);
   right = vec3.fromValues(1, 0, 0);
@@ -220,6 +222,9 @@ export class Game {
         this.playerVelocity[1] += this.gravity * deltaTime;
       }
 
+      // Time
+      this.hour += 24 * deltaTime / this.secondsPerDay;
+
       this.renderer.render({
         look: this.look,
         up: this.up,
@@ -230,6 +235,7 @@ export class Game {
         build: this.wantsToBuild,
         renderMode: this.renderMode,
         playMode: this.playMode,
+        hour: this.hour,
       });
       this.wantsToCollect = false;
       this.wantsToBuild = false;

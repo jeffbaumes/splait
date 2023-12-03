@@ -8,15 +8,41 @@ import { World } from "./World";
 
 const GaussiansToGPUPerFrame = 50000;
 
+const polyInOut = (t: number, e: number) => {
+  t *= 2;
+  let value = 0.;
+  if (t <= 1.) {
+    value = Math.pow(t, e);
+  } else {
+    value = 2. - Math.pow(2. - t, e);
+  }
+  return value / 2;
+};
+
+// Function that computes a gradient of sky colors from overhead to the horizon
+const skyGradient = (hour: number) => {
+  hour = hour % 24;
+  const brightness = hour < 12 ? polyInOut(hour/12, 10) : polyInOut((24 - hour)/12, 10);
+  // const brightness = -0.5*(Math.cos(hour / 24 * 2 * Math.PI)) + 0.5;
+  return [5/255,86/255,152/255, brightness, 181/255,210/255,219/255, brightness];
+};
+
+const sun = (hour: number) => {
+  return [Math.sin(hour / 24 * 2 * Math.PI), -Math.cos(hour / 24 * 2 * Math.PI), 0];
+};
+
 export class RendererCPU {
   context: GPUCanvasContext | null = null;
   device: GPUDevice | null = null;
   uniformBuffer: GPUBuffer | null = null;
   vertexBuffer: GPUBuffer | null = null;
   crosshairBuffer: GPUBuffer | null = null;
+  skyBuffer: GPUBuffer | null = null;
   gaussianBuffer: GPUBuffer | null = null;
   gaussianPipeline: GPURenderPipeline | null = null;
   crosshairPipeline: GPURenderPipeline | null = null;
+  skyPipeline: GPURenderPipeline | null = null;
+  skyMeshSize = 1;
   gaussianBindGroup: GPUBindGroup | null = null;
   canvasRecorder: any;
   world: World;
@@ -136,14 +162,15 @@ export class RendererCPU {
     addEventListener('resize', resizeCanvas);
     resizeCanvas();
 
+    const gaussianSize = 2;
     const vertices = new Float32Array([
-      -2, -2,
-      2, -2,
-      2,  2,
+      -gaussianSize, -gaussianSize,
+      gaussianSize, -gaussianSize,
+      gaussianSize,  gaussianSize,
 
-      -2, -2,
-      2,  2,
-      -2,  2,
+      -gaussianSize, -gaussianSize,
+      gaussianSize,  gaussianSize,
+      -gaussianSize,  gaussianSize,
     ]);
     this.vertexBuffer = this.device.createBuffer({
       label: "Gaussian vertices",
@@ -159,6 +186,33 @@ export class RendererCPU {
         shaderLocation: 0, // Position, see vertex shader
       }],
     };
+
+    const skyMesh: number[] = [];
+    for (let x = 0; x < this.skyMeshSize; x += 1) {
+      for (let y = 0; y < this.skyMeshSize; y += 1) {
+        const x0 = 2 * x / this.skyMeshSize - 1;
+        const y0 = 2 * y / this.skyMeshSize - 1;
+        const x1 = 2 * (x + 1) / this.skyMeshSize - 1;
+        const y1 = 2 * (y + 1) / this.skyMeshSize - 1;
+        skyMesh.push(
+          x0, y0,
+          x1, y0,
+          x1, y1,
+
+          x0, y0,
+          x1, y1,
+          x0, y1,
+        );
+      }
+    }
+
+    const skyVertices = new Float32Array(skyMesh);
+    this.skyBuffer = this.device.createBuffer({
+      label: "Sky vertices",
+      size: skyVertices.byteLength,
+      usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
+    });
+    this.device.queue.writeBuffer(this.skyBuffer, 0, skyVertices);
 
     const crosshairSize = 0.05;
     const crosshairWidth = 0.001;
@@ -206,12 +260,17 @@ export class RendererCPU {
       0, 0, 0, 0,
       // view matrix
       ...(mat4.lookAt(new Array(16) as Mat4, [0, 0, 0.5], [0, 0, 0], [0, 1, 0]) as number[]),
+      // inverted view matrix
+      ...(new Array(16)),
       // projection matrix
       ...(mat4.perspectiveZO(new Array(16) as Mat4, Math.PI / 2, 1, 0.1, 1000) as number[]),
       1, 1,
       this.canvas.width, this.canvas.height,
       0, 0,
       0, 0,
+      0, 0, 0, 0, // sky color up
+      0, 0, 0, 0, // sky color horizon
+      0, 0, 0, 0, // sun
     ]);
 
     this.uniformBuffer = this.device.createBuffer({
@@ -290,6 +349,35 @@ export class RendererCPU {
       },
     });
 
+    this.skyPipeline = this.device.createRenderPipeline({
+      label: "Sky pipeline",
+      layout: pipelineLayout,
+      vertex: {
+        module: gaussianShaderModule,
+        entryPoint: "skyVertex",
+        buffers: [vertexBufferLayout],
+      },
+      fragment: {
+        module: gaussianShaderModule,
+        entryPoint: "skyFragment",
+        targets: [{
+          format: canvasFormat,
+          blend: {
+            color: {
+              operation: "add" as GPUBlendOperation,
+              srcFactor: "one-minus-dst-alpha" as GPUBlendFactor,
+              dstFactor: "one" as GPUBlendFactor,
+            },
+            alpha: {
+              operation: "add" as GPUBlendOperation,
+              srcFactor: "one-minus-dst-alpha" as GPUBlendFactor,
+              dstFactor: "one" as GPUBlendFactor,
+            },
+          },
+        }],
+      },
+    });
+
     this.crosshairPipeline = this.device.createRenderPipeline({
       label: "Crosshair pipeline",
       layout: pipelineLayout,
@@ -330,14 +418,16 @@ export class RendererCPU {
     build: boolean,
     renderMode: RenderMode,
     playMode: PlayMode,
+    hour: number,
   }){
-    const {look, up, eye, desiredVelocity, deltaTime, collect, build, renderMode, playMode} = options;
+    const {look, up, eye, desiredVelocity, deltaTime, collect, build, renderMode, playMode, hour} = options;
 
     if (
       !this.context ||
       !this.device ||
       !this.gaussianPipeline ||
       !this.crosshairPipeline ||
+      !this.skyPipeline ||
       !this.gaussianBindGroup ||
       !this.uniformBuffer ||
       !this.gaussianBuffer ||
@@ -351,26 +441,31 @@ export class RendererCPU {
     const fovy = Math.PI / 2;
     const tanFovy = 1 / Math.tan(fovy / 2);
     const lookAt: [number, number, number] = [eye[0] + look[0], eye[1] + look[1], eye[2] + look[2]];
+    const viewMatrix = mat4.lookAt(new Array(16) as Mat4, eye, lookAt, up) as Mat4;
+    const projectionMatrix = mat4.perspectiveZO(new Array(16) as Mat4, fovy, this.canvas.width / this.canvas.height, 0.1, 1e8) as Mat4;
+    const inverseMatrix = mat4.multiply(new Array(16) as Mat4, projectionMatrix, viewMatrix) as Mat4;
+    mat4.invert(inverseMatrix, inverseMatrix);
     const uniformArray = new Float32Array([
       // Force on player for this frame and delta time
       ...desiredVelocity, deltaTime,
       // Eye position
       ...eye, 0,
       // View matrix
-      // ...(mat4.lookAt(new Array(16) as Mat4Array, eye, [eye[0], eye[1], eye[2] - 1], [0, 1, 0]) as number[]),
-      ...(mat4.lookAt(new Array(16) as Mat4, eye, lookAt, up) as number[]),
-      // ...(mat4.targetTo(new Array(16) as Mat4Array, eye, [0, 0, 0], [0, 1, 0]) as number[]),
+      ...viewMatrix,
       // Projection matrix
-      ...(mat4.perspectiveZO(new Array(16) as Mat4, fovy, this.canvas.width / this.canvas.height, 0.1, 1000) as number[]),
+      ...projectionMatrix,
+      // Inverse matrix
+      ...inverseMatrix,
       // These should whatever is in the first two diagonals of the perspective matrix, times w and h respectively
       tanFovy * this.canvas.height / 2, tanFovy * this.canvas.height / 2,
-      // 1000, 1000,
       // Canvas size
       this.canvas.width, this.canvas.height,
       build ? 1 : 0,
       collect ? 1 : 0,
       renderMode,
       playMode,
+      ...skyGradient(hour),
+      ...sun(hour), 0,
     ]);
 
     this.device.queue.writeBuffer(this.uniformBuffer, 0, uniformArray);
@@ -382,10 +477,6 @@ export class RendererCPU {
       this.device.queue.writeBuffer(this.gaussianBuffer, offset*4, this.gaussiansToSend, offset, size);
       this.gaussiansSent += GaussiansToGPUPerFrame;
     }
-
-    // this.world.gaussianList.sort((a, b) => vec3.dist(eye, [a[4], a[5], a[6]]) - vec3.dist(eye, [b[4], b[5], b[6]]));
-    // const gaussians = new Float32Array(this.world.gaussianList.flat());
-    // this.device.queue.writeBuffer(this.gaussianBuffer, 0, gaussians);
 
     if (!this.sorting && !this.merging) {
       this.sortWorker.postMessage({
@@ -421,6 +512,19 @@ export class RendererCPU {
     pass.setVertexBuffer(0, this.vertexBuffer);
     pass.draw(6, this.world.gaussianList.length);
     pass.end();
+
+    const skyPass = encoder.beginRenderPass({
+      colorAttachments: [{
+        view: this.context.getCurrentTexture().createView(),
+        loadOp: "load" as GPULoadOp,
+        storeOp: "store" as GPUStoreOp,
+      }],
+    });
+    skyPass.setPipeline(this.skyPipeline);
+    skyPass.setBindGroup(0, this.gaussianBindGroup);
+    skyPass.setVertexBuffer(0, this.skyBuffer);
+    skyPass.draw(6*(this.skyMeshSize**2));
+    skyPass.end();
 
     const crosshairPass = encoder.beginRenderPass({
       colorAttachments: [{

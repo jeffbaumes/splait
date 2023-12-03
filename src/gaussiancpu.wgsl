@@ -23,12 +23,15 @@ struct Uniforms {
   eye: vec3f,
   view: mat4x4f,
   projection: mat4x4f,
+  inverse: mat4x4f,
   focal: vec2f,
   viewport: vec2f,
   build: f32,
   collect: f32,
   renderMode: f32,
   playMode: f32,
+  skyGradient: array<vec4f, 2>,
+  sun: vec3f,
 };
 
 @group(0) @binding(0) var<uniform> uniforms: Uniforms;
@@ -37,6 +40,7 @@ struct Uniforms {
 const Immovable = 0.;
 const Movable = 1.;
 const Permeable = 2.;
+const Star = 3.;
 
 const StateNormal = 0.;
 const StateSelected = 1.;
@@ -115,15 +119,22 @@ fn vertexMain(vertex: VertexInput) -> VertexOutput  {
   output.pos = vertex.pos;
   if (gaussian.scaleAndState.w == StateSelected) {
     output.color = vec4f(1.0, 1.0, 0.0, gaussian.color.a);
-  } else if (gaussian.centerAndDistance.w >= MaxSimulationDistance) {
-    var gray = vec3(0.299*gaussian.color.r + 0.587*gaussian.color.g + 0.114*gaussian.color.b);
-    output.color = vec4f(0.7*gaussian.color.rgb + 0.0*gray, gaussian.color.a);
-    var fog = 1. - exp(-gaussian.centerAndDistance.w / 10000.);
-    var fogColor = vec4(1., 1., 1., 1.);
-    output.color = output.color * (1. - fog) + fogColor * fog;
-    // output.color = vec4f(0.0*gaussian.color.rgb + 1.0*gray, gaussian.color.a);
+  } else if (gaussian.centerAndDistance.w <= MaxSimulationDistance) {
+    // var gray = vec3(0.299*gaussian.color.r + 0.587*gaussian.color.g + 0.114*gaussian.color.b);
+    output.color = vec4f(gaussian.color.rgb, gaussian.color.a);
   } else {
     output.color = gaussian.color;
+  }
+  var fogColor = uniforms.skyGradient[1];
+  if (gaussian.velocityAndMaterial.w == Star) {
+    output.color.a = gaussian.color.a * (1. - fogColor.a);
+  } else {
+    // Fog
+    var fog = 1. - exp(-gaussian.centerAndDistance.w / 10000.);
+    output.color = vec4(output.color.rgb * (1. - fog) + fogColor.rgb * fog, gaussian.color.a);
+    // Darkness
+    output.color = vec4(output.color.rgb * max(fogColor.a, 0.1), gaussian.color.a);
+    // output.color *= max(fogColor.a, 0.1);
   }
   return output;
 }
@@ -132,18 +143,66 @@ fn vertexMain(vertex: VertexInput) -> VertexOutput  {
 fn fragmentMain(input: VertexOutput) -> @location(0) vec4f {
   var a = -dot(input.pos, input.pos);
 
+  var threshold = -4.0;
+
   if (uniforms.renderMode == RenderModeGaussian) {
-    if (a < -4.0) {
+    if (a < threshold) {
       discard;
     }
     var b = exp(a) * input.color.a;
     return vec4(b * input.color.rgb, b);
   }
 
-  if (a < -1.0) {
+  if (a < threshold) {
     discard;
   }
-  return vec4(input.color);
+  return vec4(input.color.a * input.color.rgb, input.color.a);
+}
+
+struct SkyInput {
+  @location(0) pos: vec2f,
+};
+
+struct SkyOutput {
+  @builtin(position) pos: vec4f,
+};
+
+
+@vertex
+fn skyVertex(vertex: SkyInput) -> SkyOutput  {
+  var output: SkyOutput;
+  var pos = uniforms.inverse * vec4(vertex.pos, 0., 1.);
+  pos = pos / pos.w;
+  var dir = normalize(pos.xyz - uniforms.eye);
+  output.pos = vec4(vertex.pos, 0.5, 1.);
+  return output;
+}
+
+@fragment
+fn skyFragment(input: SkyOutput) -> @location(0) vec4f {
+  var pos = vec4(2. * input.pos.x / uniforms.viewport.x - 1., 2. * (1. - input.pos.y / uniforms.viewport.y) - 1., 0.5, 1.);
+  pos = uniforms.inverse * pos;
+  pos = pos / pos.w;
+  var dir = normalize(pos.xyz - uniforms.eye);
+  var angle = acos(dot(dir, vec3(0., 1., 0.)));
+  var sunAngle = acos(dot(dir, uniforms.sun));
+
+  var pi = radians(180.0);
+  var up0horizon1 = clamp(abs(angle)/(pi / 2.), 0., 1.);
+  var color = mix(uniforms.skyGradient[0], uniforms.skyGradient[1], pow(up0horizon1, 4.));
+  if (sunAngle < radians(1.)) {
+    var sunLevel = 1. - sunAngle / radians(1.);
+    var e = 3.;
+    var t = sunLevel * 2.;
+    var polyInOut = 0.;
+    if (t <= 1.) {
+      polyInOut = pow(t, e);
+    } else {
+      polyInOut = 2. - pow(2. - t, e) / 2.;
+    }
+    color = mix(color, vec4(1., 1., 1., 1.), polyInOut);
+  }
+  return vec4(color.rgb * color.a, color.a);
 }
 
 struct CrosshairInput {
