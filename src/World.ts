@@ -146,6 +146,7 @@ export class World {
     // Stars
     // const parsec = 3.086e+16;
     const parsec = 3.086e+8;
+    // const parsec = 3.086;
     let totalBrightness = 0;
     stars.forEach((star) => {
       if (!star.x || !star.y || !star.z || !star.K) {
@@ -155,7 +156,6 @@ export class World {
       totalBrightness += brightness;
       gaussianList.push(this.createGaussian({
         position: [parsec * star.x, parsec * star.y, parsec * star.z],
-        // color: [brightness * (star.K.r ?? 1), brightness * (star.K.g ?? 1), brightness * (star.K.b ?? 1), 1],
         color: [star.K.r ?? 1, star.K.g ?? 1, star.K.b ?? 1, brightness],
         scale: [1, 1, 1],
         q,

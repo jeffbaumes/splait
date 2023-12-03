@@ -215,7 +215,7 @@ export class RendererCPU {
     this.device.queue.writeBuffer(this.skyBuffer, 0, skyVertices);
 
     const crosshairSize = 0.05;
-    const crosshairWidth = 0.001;
+    const crosshairWidth = 0.005;
     const crosshairVertices = new Float32Array([
       -crosshairSize, -crosshairWidth,
       crosshairSize, -crosshairWidth,
