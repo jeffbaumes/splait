@@ -1,8 +1,9 @@
-import { vec3 } from "gl-matrix";
+import { quat, vec3 } from "gl-matrix";
 
 import { Renderer } from "./Renderer";
 import { RendererCPU } from "./RendererCPU";
-import { PlayMode, RenderMode, Vec3 } from "./types";
+import { G, Material, PlayMode, RenderMode, Vec3 } from "./types";
+import { collide } from "./sim";
 
 // const vecToString = (x: number[] | Float32Array | null, digits: number = 0) => {
 //   if (!x) {
@@ -32,7 +33,6 @@ export class Game {
   playerWidth = 0.5;
   playerSpeed = 15.0;
   playerDampen = 0.5;
-  playerVelocity = vec3.fromValues(0, 0, 0);
   wantsToJump = false;
   wantsToCollect = false;
   wantsToBuild = false;
@@ -51,15 +51,14 @@ export class Game {
   renderMode = RenderMode.Gaussian;
   hour = 0;
   secondsPerDay = 1*60;
-  movement = vec3.fromValues(0, 0, 0);
   forward = vec3.fromValues(0, 0, -1);
   right = vec3.fromValues(1, 0, 0);
-  eye = vec3.fromValues(0, 5, 20);
   look = vec3.fromValues(0, 0, -1);
   up = vec3.fromValues(0, 1, 0);
   pixelSize = 1;
   frame = '...............................................';
   renderer: Renderer | RendererCPU;
+  playerGaussian: number[];
 
   constructor(private canvas: HTMLCanvasElement) {
     if (!this.canvas) {
@@ -68,6 +67,14 @@ export class Game {
     const sim = getURLParameter('sim');
     this.renderer = sim === 'gpu' ? new Renderer(this.canvas) : new RendererCPU(this.canvas);
     this.focus();
+
+    this.playerGaussian = this.renderer.world.createGaussian({
+      position: [0, 0, 0],
+      color: [0, 0, 0, 0],
+      scale: [this.playerWidth, this.playerHeight, this.playerWidth],
+      material: Material.Player,
+      q: quat.fromEuler([0, 0, 0, 0], 0, 0, 0),
+    });
 
     const debugDiv = document.querySelector<HTMLDivElement>("#debug");
     const eyeDiv = document.querySelector<HTMLDivElement>('#eye');
@@ -206,20 +213,22 @@ export class Game {
       // }
 
       // Update velocity
-      this.playerVelocity[0] = 0.8*desiredVelocity[0] + 0.2*this.playerVelocity[0];
+      this.playerGaussian[G.VelX] = 0.8*desiredVelocity[0] + 0.2*this.playerGaussian[G.VelX];
       if (this.playMode == PlayMode.Fly || desiredVelocity[1] !== 0) {
-        this.playerVelocity[1] = 0.8*desiredVelocity[1] + 0.2*this.playerVelocity[1];
+        this.playerGaussian[G.VelY] = 0.8*desiredVelocity[1] + 0.2*this.playerGaussian[G.VelY];
       }
-      this.playerVelocity[2] = 0.8*desiredVelocity[2] + 0.2*this.playerVelocity[2];
+      this.playerGaussian[G.VelZ] = 0.8*desiredVelocity[2] + 0.2*this.playerGaussian[G.VelZ];
+
+      collide(this.playerGaussian, this.renderer.world.gaussianList);
 
       // Update position
-      this.eye[0] += this.playerVelocity[0] * deltaTime;
-      this.eye[1] += this.playerVelocity[1] * deltaTime;
-      this.eye[2] += this.playerVelocity[2] * deltaTime;
+      this.playerGaussian[G.PosX] += this.playerGaussian[G.VelX] * deltaTime;
+      this.playerGaussian[G.PosY] += this.playerGaussian[G.VelY] * deltaTime;
+      this.playerGaussian[G.PosZ] += this.playerGaussian[G.VelZ] * deltaTime;
 
       // Gravity
       if (this.playMode === PlayMode.Normal) {
-        this.playerVelocity[1] += this.gravity * deltaTime;
+        this.playerGaussian[G.VelY] += this.gravity * deltaTime;
       }
 
       // Time
@@ -228,7 +237,7 @@ export class Game {
       this.renderer.render({
         look: this.look,
         up: this.up,
-        eye: this.eye,
+        eye: [this.playerGaussian[G.PosX], this.playerGaussian[G.PosY] + this.playerEyeHeight, this.playerGaussian[G.PosZ]],
         desiredVelocity,
         deltaTime,
         collect: this.wantsToCollect,

@@ -22,6 +22,13 @@ export enum Material {
   Movable = 1,
   Permeable = 2,
   Star = 3,
+  Player = 4,
+};
+
+export enum State {
+  Normal = 0.,
+  Selected = 1.,
+  Inventory = 2.,
 };
 
 // // Color rgba
