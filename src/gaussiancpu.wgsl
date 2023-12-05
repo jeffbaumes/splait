@@ -119,9 +119,10 @@ fn vertexMain(vertex: VertexInput) -> VertexOutput  {
   output.pos = vertex.pos;
   if (gaussian.scaleAndState.w == StateSelected) {
     output.color = vec4f(1.0, 1.0, 0.0, gaussian.color.a);
-  } else if (gaussian.centerAndDistance.w <= MaxSimulationDistance) {
-    // var gray = vec3(0.299*gaussian.color.r + 0.587*gaussian.color.g + 0.114*gaussian.color.b);
-    output.color = vec4f(gaussian.color.rgb, gaussian.color.a);
+  } else if (abs(gaussian.centerAndDistance.w - MaxSimulationDistance) <= 1.0) {
+    var gray = vec3(0.299*gaussian.color.r + 0.587*gaussian.color.g + 0.114*gaussian.color.b);
+    var yellow = vec3(1.0, 1.0, 0.0);
+    output.color = vec4f(0.5*gaussian.color.rgb + 0.5*yellow, gaussian.color.a);
   } else {
     output.color = gaussian.color;
   }

@@ -25,6 +25,7 @@ export class Renderer {
   distancePipeline: GPUComputePipeline | null = null;
   targetPipeline: GPUComputePipeline | null = null;
   gaussianBindGroups: GPUBindGroup[] | null = null;
+  gaussians = new Float32Array();
   canvasRecorder: any;
   world: World;
 

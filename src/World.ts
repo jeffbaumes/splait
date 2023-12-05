@@ -82,8 +82,10 @@ export class World {
 
     const gaussianList: number[][] = [];
 
+    // const generateDistance = 2;
     const generateDistance = 200;
     const groundSpacing = 1.0;
+    // const groundScale = 0.1;
     const groundScale = 1.0;
     const groundHeight = (x: number, z: number) => {
       // return 0;
@@ -144,9 +146,8 @@ export class World {
     const q = quat.fromEuler([0, 0, 0, 0], 0, 0, 0);
 
     // Stars
-    // const parsec = 3.086e+16;
-    const parsec = 3.086e+8;
-    // const parsec = 3.086;
+    const parsec = 3.086e+16;
+    const starDistScale = parsec / 10e8;
     let totalBrightness = 0;
     stars.forEach((star) => {
       if (!star.x || !star.y || !star.z || !star.K) {
@@ -155,17 +156,17 @@ export class World {
       const brightness = 500 * star.N / (star.p**2 * 4 * Math.PI);
       totalBrightness += brightness;
       gaussianList.push(this.createGaussian({
-        position: [parsec * star.x, parsec * star.y, parsec * star.z],
+        position: [starDistScale * star.x, starDistScale * star.y, starDistScale * star.z],
         color: [star.K.r ?? 1, star.K.g ?? 1, star.K.b ?? 1, brightness],
         scale: [1, 1, 1],
         q,
         material: Material.Star,
       }));
     });
-    console.log('totalBrightness', totalBrightness / stars.length);
+    // console.log('totalBrightness', totalBrightness / stars.length);
 
     // Grass
-    for (let i = 0; i < 1000; i++) {
+    for (let i = 0; i < 0; i++) {
       const color: Vec4 = [0.1*Math.random(), 0.3 + 0.6*Math.random(), 0.1*Math.random(), 1];
       const height = 0.2 + 0.2 * Math.random();
       const [x, z] = randomPointInCircle([0, 0], generateDistance);
@@ -205,7 +206,7 @@ export class World {
 
 
     // Trees
-    for (var i = 0; i < 20; i += 2) {
+    for (var i = 0; i < 10; i += 2) {
       const [x, z] = randomPointInCircle([0, 0], generateDistance);
       const p = [
         x,

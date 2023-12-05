@@ -58,7 +58,7 @@ export class Game {
   pixelSize = 1;
   frame = '...............................................';
   renderer: Renderer | RendererCPU;
-  playerGaussian: number[];
+  playerGaussian: Float32Array;
 
   constructor(private canvas: HTMLCanvasElement) {
     if (!this.canvas) {
@@ -68,13 +68,13 @@ export class Game {
     this.renderer = sim === 'gpu' ? new Renderer(this.canvas) : new RendererCPU(this.canvas);
     this.focus();
 
-    this.playerGaussian = this.renderer.world.createGaussian({
+    this.playerGaussian = new Float32Array(this.renderer.world.createGaussian({
       position: [0, 0, 0],
       color: [0, 0, 0, 0],
       scale: [this.playerWidth, this.playerHeight, this.playerWidth],
       material: Material.Player,
       q: quat.fromEuler([0, 0, 0, 0], 0, 0, 0),
-    });
+    }));
 
     const debugDiv = document.querySelector<HTMLDivElement>("#debug");
     const eyeDiv = document.querySelector<HTMLDivElement>('#eye');
@@ -219,7 +219,7 @@ export class Game {
       }
       this.playerGaussian[G.VelZ] = 0.8*desiredVelocity[2] + 0.2*this.playerGaussian[G.VelZ];
 
-      collide(this.playerGaussian, this.renderer.world.gaussianList);
+      collide(this.playerGaussian, 0, this.renderer.gaussians, false);
 
       // Update position
       this.playerGaussian[G.PosX] += this.playerGaussian[G.VelX] * deltaTime;

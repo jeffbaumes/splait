@@ -1,27 +1,24 @@
 import { vec3 } from "gl-matrix";
-import { G, Material, PlayMode, State, Vec3 } from "./types";
+import { G, Material, State, Vec3 } from "./types";
 import { MaxSimulationDistance, collide } from "./sim";
 
-let gaussianList: number[][] = [];
+let gaussians = new Float32Array();
 let eye: vec3 = [0., 0., 0.];
 
 const collideAll = () => {
-  for (let idx = 0; idx < gaussianList.length; idx += 1) {
-    collide(gaussianList[idx], gaussianList);
+  for (let idx = 0; idx < gaussians.length; idx += G.Stride) {
+    collide(gaussians, idx, gaussians, true);
   }
-}
+};
 
-const simulate = ({desiredVelocity, playMode, deltaTime}: {desiredVelocity: Vec3, playMode: PlayMode, deltaTime: number}) => {
-  let idx = 0;
-  for (; idx < gaussianList.length; idx += 1) {
-    const gaussian = gaussianList[idx];
-    const material = gaussian[G.Material] as Material;
-    const center = [gaussian[G.PosX], gaussian[G.PosY], gaussian[G.PosZ]] as Vec3;
-    const distance = gaussian[G.Distance];
-    const state = gaussian[G.State];
+const simulate = ({deltaTime}: {deltaTime: number}) => {
+  for (let idx = 0; idx < gaussians.length; idx += G.Stride) {
+    const material = gaussians[idx + G.Material] as Material;
+    const center = [gaussians[idx + G.PosX], gaussians[idx + G.PosY], gaussians[idx + G.PosZ]] as Vec3;
+    const distance = gaussians[idx + G.Distance];
+    const state = gaussians[idx + G.State];
 
     if (distance > MaxSimulationDistance) {
-      // break;
       continue;
     }
 
@@ -35,53 +32,37 @@ const simulate = ({desiredVelocity, playMode, deltaTime}: {desiredVelocity: Vec3
     // }
 
     // Update position
-    gaussian[G.PosX] = center[0] + deltaTime*gaussian[G.VelX];
-    gaussian[G.PosY] = center[1] + deltaTime*gaussian[G.VelY];
-    gaussian[G.PosZ] = center[2] + deltaTime*gaussian[G.VelZ];
+    gaussians[idx + G.PosX] = center[0] + deltaTime*gaussians[idx + G.VelX];
+    gaussians[idx + G.PosY] = center[1] + deltaTime*gaussians[idx + G.VelY];
+    gaussians[idx + G.PosZ] = center[2] + deltaTime*gaussians[idx + G.VelZ];
 
     // Gravity
-    if (idx !== 0 || playMode !== PlayMode.Fly) {
-      gaussian[G.VelY] -= deltaTime * 25.0;
-    }
-
-    // Update player based on desired velocity
-    if (idx === 0) {
-      gaussian[G.VelX] = 0.8*desiredVelocity[0] + 0.2*gaussian[G.VelX];
-      gaussian[G.VelZ] = 0.8*desiredVelocity[2] + 0.2*gaussian[G.VelZ];
-
-      // Detect desire to jump or fly
-      if (playMode == PlayMode.Fly) {
-        gaussian[G.VelY] = 0.8*desiredVelocity[1] + 0.2*gaussian[G.VelY];
-      } else if (desiredVelocity[1] !== 0.) {
-        gaussian[G.VelY] = desiredVelocity[1];
-      }
-    }
+    gaussians[idx + G.VelY] -= deltaTime * 25.0;
   }
-  const gaussians = new Float32Array(gaussianList.flat());
-  postMessage({type: 'simulate', gaussians, gaussianList});
+  postMessage({type: 'simulate', gaussians});
 }
 
 onmessage = (e) => {
   if (e.data.type === 'merge') {
-    const previousMap: {[id: number]: number[]} = {};
-    gaussianList.forEach((g: number[]) => {
-      previousMap[g[G.ID]] = g;
-    });
-    for (let i = 0; i < e.data.gaussianList.length; i += 1) {
-      const prev = previousMap[e.data.gaussianList[i][G.ID]];
-      if (prev) {
-        // // Make sure to get new distance from sorting
-        // prev[G.Distance] = e.data.gaussianList[i][G.Distance];
-        e.data.gaussianList[i] = prev;
+    const previousMap: {[id: number]: number} = {};
+    for (let i = 0; i < gaussians.length; i += G.Stride) {
+      previousMap[gaussians[i + G.ID]] = i;
+    }
+    for (let i = 0; i < e.data.gaussians.length; i += G.Stride) {
+      const prev = previousMap[e.data.gaussians[i + G.ID]];
+      if (prev !== undefined) {
+        for (let j = 0; j < G.Stride; j += 1) {
+          e.data.gaussians[i + j] = gaussians[prev + j];
+        }
       }
     }
-    gaussianList = e.data.gaussianList;
+    gaussians = e.data.gaussians;
     eye = e.data.eye;
     postMessage({type: 'merge'});
   } else if (e.data.type === 'simulate') {
-    gaussianList.forEach((d) => {
-      d[G.Distance] = vec3.dist(eye, [d[G.PosX], d[G.PosY], d[G.PosZ]]);
-    });
+    for (let i = 0; i < gaussians.length; i += G.Stride) {
+      gaussians[i + G.Distance] = vec3.dist(eye, [gaussians[i + G.PosX], gaussians[i + G.PosY], gaussians[i + G.PosZ]]);
+    }
     collideAll();
     simulate(e.data);
   }

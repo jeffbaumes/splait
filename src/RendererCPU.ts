@@ -52,8 +52,9 @@ export class RendererCPU {
   simWorker: Worker;
   simulating = false;
   simulationDeltaTime = 0;
-  latestSimulateGaussianList: number[][] = [];
+  latestSimulateGaussians = new Float32Array();
   merging = false;
+  gaussians: Float32Array = new Float32Array();
   gaussiansToSend: Float32Array | null = null;
   gaussiansSent = 0;
 
@@ -73,16 +74,17 @@ export class RendererCPU {
         if (!this.simulating) {
           this.sortWorker.postMessage({
             type: "merge",
-            gaussianList: this.latestSimulateGaussianList,
+            gaussians: this.latestSimulateGaussians,
           });
         }
       } else if (e.data.type === 'merge') {
         // this.device.queue.writeBuffer(this.gaussianBuffer, 0, e.data.gaussians);
+        this.gaussians = e.data.gaussians;
         this.gaussiansToSend = e.data.gaussians;
         this.gaussiansSent = 0;
         this.simWorker.postMessage({
           type: "merge",
-          gaussianList: e.data.gaussianList,
+          gaussians: e.data.gaussians.slice(0, e.data.maxDistanceIndex * G.Stride),
           eye: this.sortEye,
         });
       }
@@ -96,12 +98,13 @@ export class RendererCPU {
         return;
       }
       if (e.data.type === 'simulate') {
-        this.latestSimulateGaussianList = e.data.gaussianList;
+        this.latestSimulateGaussians = e.data.gaussians;
         this.device.queue.writeBuffer(this.gaussianBuffer, 0, e.data.gaussians);
+        this.gaussians.set(e.data.gaussians);
         if (this.merging) {
           this.sortWorker.postMessage({
             type: "merge",
-            gaussianList: e.data.gaussianList,
+            gaussians: e.data.gaussians,
           });
         }
         this.simulating = false;
@@ -241,18 +244,20 @@ export class RendererCPU {
     this.device.queue.writeBuffer(this.crosshairBuffer, 0, crosshairVertices);
 
     this.world.generateWorldGaussians();
+
+    this.gaussians = new Float32Array(this.world.gaussianList.flat());
+
     this.sortWorker.postMessage({
       type: "gaussians",
-      gaussianList: this.world.gaussianList,
+      gaussians: this.gaussians,
     });
 
-    const gaussians = new Float32Array(this.world.gaussianList.flat());
     this.gaussianBuffer = this.device.createBuffer({
       label: "Gaussian buffer",
-      size: gaussians.byteLength,
+      size: this.gaussians.byteLength,
       usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC,
     });
-    this.device.queue.writeBuffer(this.gaussianBuffer, 0, gaussians);
+    this.device.queue.writeBuffer(this.gaussianBuffer, 0, this.gaussians);
     let uniformArray = new Float32Array([
       // force and deltaTime
       0, 0, 0, 0,
@@ -510,7 +515,7 @@ export class RendererCPU {
     pass.setPipeline(this.gaussianPipeline);
     pass.setBindGroup(0, this.gaussianBindGroup);
     pass.setVertexBuffer(0, this.vertexBuffer);
-    pass.draw(6, this.world.gaussianList.length);
+    pass.draw(6, this.gaussians.length / G.Stride);
     pass.end();
 
     const skyPass = encoder.beginRenderPass({
