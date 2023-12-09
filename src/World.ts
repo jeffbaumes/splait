@@ -33,6 +33,30 @@ export class World {
 
   currentGaussianID = 0;
 
+  noise2D: (x: number, y: number) => number;
+
+  constructor() {
+    const randomFunction = alea(Math.random());
+    this.noise2D = createNoise2D(randomFunction);
+  }
+
+  groundHeight(x: number, z: number) {
+    // return 0;
+    // return noise2D(x / 1000, z / 1000) * 100;
+    let f = 1/10000;
+    var fbm = this.noise2D(x * f, z * f);
+    f *= 2; x += 32;
+    fbm += this.noise2D(x * f, z * f) * 0.5;
+    f *= 2; x += 42;
+    fbm += this.noise2D(x * f, z * f) * 0.25;
+    f *= 2; x += 9973;
+    fbm += this.noise2D(x * f, z * f) * 0.125;
+    f *= 2; x += 824;
+    fbm += this.noise2D(x * f, z * f) * 0.065;
+    return fbm*300;
+    // return 0;
+  }
+
   createGaussian({position, color, scale, q, material}: {position: vec3, color: vec4, scale: vec3, q: quat, material: Material}) {
     let R = mat3.fromQuat(new Array(9) as Mat3, q);
     const M = [
@@ -78,8 +102,6 @@ export class World {
   }
 
   generateWorldGaussians() {
-    const randomFunction = alea(Math.random());
-    const noise2D = createNoise2D(randomFunction);
 
     const gaussianList: number[][] = [];
 
@@ -88,22 +110,6 @@ export class World {
     const groundSpacing = 1;
     // const groundScale = 0.1;
     const groundScale = 1;
-    const groundHeight = (x: number, z: number) => {
-      // return 0;
-      // return noise2D(x / 1000, z / 1000) * 100;
-      let f = 1/10000;
-      var fbm = noise2D(x * f, z * f);
-      f *= 2; x += 32;
-      fbm += noise2D(x * f, z * f) * 0.5;
-      f *= 2; x += 42;
-      fbm += noise2D(x * f, z * f) * 0.25;
-      f *= 2; x += 9973;
-      fbm += noise2D(x * f, z * f) * 0.125;
-      f *= 2; x += 824;
-      fbm += noise2D(x * f, z * f) * 0.065;
-      return fbm*300;
-      // return 0;
-    };
 
     const groundColor = (y: number) => {
       y = y / 150 + 2;
@@ -174,7 +180,7 @@ export class World {
       const [x, z] = randomPointInCircle([0, 0], generateDistance);
       const position: Vec3 = [
         x,
-        1.5*height + groundHeight(x, z),
+        1.5*height + this.groundHeight(x, z),
         z,
       ];
       const scale: Vec3 = [0.05, height, 0.05];
@@ -188,7 +194,7 @@ export class World {
         if (x**2 + z**2 > generateDistance**2) {
           continue;
         }
-        const height = groundHeight(x, z);
+        const height = this.groundHeight(x, z);
         const position: Vec3 = [
           x,
           height - 2*groundScale,
@@ -212,7 +218,7 @@ export class World {
       const [x, z] = randomPointInCircle([0, 0], generateDistance);
       const p = [
         x,
-        groundHeight(x, z),
+        this.groundHeight(x, z),
         z,
       ];
       const tree = getRandomTree();
@@ -259,7 +265,7 @@ export class World {
       for (let ang = 0; ang < 2*Math.PI - deltaAngle/2; ang += deltaAngle) {
         const x = d*Math.cos(ang);
         const z = d*Math.sin(ang);
-        let y = groundHeight(x, z);
+        let y = this.groundHeight(x, z);
         let c = groundColor(y);
         gaussianList.push(this.createGaussian({
           position: [x, y - 2*scale, z],

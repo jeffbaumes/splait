@@ -33,11 +33,12 @@ struct Uniforms {
   playMode: f32,
   skyGradient: array<vec4f, 2>,
   sun: vec3f,
-  targetID: f32,
+  selectMode: f32,
 };
 
 @group(0) @binding(0) var<uniform> uniforms: Uniforms;
 @group(0) @binding(1) var<storage> gaussians: array<Gaussian>;
+@group(0) @binding(2) var<storage> selected: array<Gaussian>;
 
 const Immovable = 0.;
 const Movable = 1.;
@@ -109,6 +110,10 @@ fn viewportPosition(gaussian: Gaussian, pos: vec2f) -> vec4f {
 fn vertexMain(vertex: VertexInput) -> VertexOutput  {
   var output: VertexOutput;
   var gaussian = gaussians[vertex.instance];
+  // var gaussian = selected[vertex.instance];
+  if (uniforms.selectMode == 1.) {
+    gaussian = selected[vertex.instance];
+  }
 
   // Don't draw objects that are in the inventory
   if (gaussian.scaleAndState.w == StateInventory) {
@@ -119,7 +124,7 @@ fn vertexMain(vertex: VertexInput) -> VertexOutput  {
   output.viewportPos = viewportPosition(gaussian, vertex.pos);
 
   output.pos = vertex.pos;
-  if (gaussian.scaleAndState.w == StateSelected) {
+  if (uniforms.selectMode == 1.) {
     output.color = vec4f(1.0, 1.0, 0.0, gaussian.color.a);
   // } else if (abs(gaussian.centerAndDistance.w - MaxSimulationDistance) <= 1.0) {
   } else if (gaussian.centerAndDistance.w > MaxSimulationDistance) {
@@ -127,14 +132,14 @@ fn vertexMain(vertex: VertexInput) -> VertexOutput  {
     // var yellow = vec3(1.0, 1.0, 0.0);
     // output.color = vec4f(0.5*gaussian.color.rgb + 0.5*yellow, gaussian.color.a);
     output.color = vec4f(0.7*gaussian.color.rgb + 0.3*gray, gaussian.color.a);
+  // } else if (uniforms.targetIndex >= 0. && length(gaussians[vertex.instance].centerAndDistance.xyz - gaussians[u32(uniforms.targetIndex)].centerAndDistance.xyz) <= uniforms.selectDistance) {
+  //   output.color = vec4(1., 1., 1., 1.);
   } else {
     output.color = gaussian.color;
   }
   var fogColor = uniforms.skyGradient[1];
   if (gaussian.velocityAndMaterial.w == Star) {
     output.color.a = gaussian.color.a * (1. - fogColor.a);
-  } else if (gaussian.id == uniforms.targetID) {
-    output.color = vec4(1., 1., 1., 1.);
   } else {
     // Fog
     var fog = 1. - exp(-gaussian.centerAndDistance.w / 10000.);

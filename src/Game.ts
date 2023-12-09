@@ -35,6 +35,7 @@ export class Game {
   wantsToJump = false;
   wantsToCollect = false;
   wantsToBuild = false;
+  selectDistance = 0;
   fallSpeed = 20.0;
   turnSpeed = 0.002;
   azimuth = 0;
@@ -71,7 +72,7 @@ export class Game {
     this.focus();
 
     this.playerGaussian = new Float32Array(this.renderer.world.createGaussian({
-      position: [0, 0, 0],
+      position: [0, this.renderer.world.groundHeight(0, 0) + this.playerHeight, 0],
       color: [0, 0, 0, 0],
       scale: [this.playerWidth / 2, this.playerHeight / 2, this.playerWidth / 2],
       material: Material.Player,
@@ -127,6 +128,9 @@ export class Game {
       if (event.button === 2) {
         this.wantsToBuild = false;
       }
+    });
+    this.canvas.addEventListener('wheel', (event) => {
+      this.selectDistance = Math.max(0, this.selectDistance + event.deltaY / 100);
     });
 
     window.addEventListener("keypress", (event) => {
@@ -240,18 +244,19 @@ export class Game {
         this.playerGaussian[G.PosY] - this.playerHeight / 2 + this.playerEyeHeight / 2,
         this.playerGaussian[G.PosZ],
       ];
-      const target = findTarget({eye, look: this.look, gaussians: this.renderer.gaussians});
 
       const edits: Float32Array[] = [];
-      if (this.wantsToCollect) {
-        if (target !== null) {
-          const item = this.renderer.gaussians.slice(target, target + G.Stride);
-          item[G.State] = State.Inventory;
-          edits.push(item);
-          this.inventory.push(item);
-          // if (this.renderer.device && this.renderer.gaussianBuffer) {
-          //   this.renderer.device.queue.writeBuffer(this.renderer.gaussianBuffer, (target + G.State)*4, item, G.State, 4);
-          // }
+      let selected = new Float32Array();
+      const target = findTarget({eye, look: this.look, gaussians: this.renderer.gaussians});
+      if (target !== null) {
+        const targetGaussian = this.renderer.gaussians.slice(target, target + G.Stride);
+        selected = targetGaussian;
+        if (this.wantsToCollect) {
+          if (target !== null) {
+            targetGaussian[G.State] = State.Inventory;
+            edits.push(targetGaussian);
+            this.inventory.push(targetGaussian);
+          }
         }
       }
 
@@ -268,12 +273,13 @@ export class Game {
         deltaTime,
         collect: this.wantsToCollect,
         build: this.wantsToBuild,
-        targetID: target === null ? null : this.renderer.gaussians[target + G.ID],
+        targetIndex: target === null ? null : target / G.Stride,
         renderMode: this.renderMode,
         playMode: this.playMode,
         hour: this.hour,
         playerGaussian: this.playerGaussian,
         edits,
+        selected,
       });
       this.wantsToCollect = false;
       this.wantsToBuild = false;

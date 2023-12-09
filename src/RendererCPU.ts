@@ -5,6 +5,7 @@ import { G, Mat4, PlayMode, RenderMode } from "./types";
 import { World } from "./World";
 
 const GaussiansToGPUPerFrame = 50000;
+const MaxSelectedGaussians = 10000;
 
 const polyInOut = (t: number, e: number) => {
   t *= 2;
@@ -38,6 +39,7 @@ export class RendererCPU {
   skyBuffer: GPUBuffer | null = null;
   gaussianBuffer: GPUBuffer | null = null;
   gaussianPipeline: GPURenderPipeline | null = null;
+  selectedPipeline: GPURenderPipeline | null = null;
   crosshairPipeline: GPURenderPipeline | null = null;
   skyPipeline: GPURenderPipeline | null = null;
   skyMeshSize = 1;
@@ -57,6 +59,7 @@ export class RendererCPU {
   gaussians: Float32Array = new Float32Array();
   gaussiansToSend: Float32Array | null = null;
   gaussiansSent = 0;
+  selectedBuffer: GPUBuffer | null = null;
 
   constructor(private canvas: HTMLCanvasElement) {
     this.world = new World();
@@ -236,6 +239,14 @@ export class RendererCPU {
       usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC,
     });
     this.device.queue.writeBuffer(this.gaussianBuffer, 0, this.gaussians);
+
+    const selected = new Float32Array(MaxSelectedGaussians * G.Stride);
+    this.selectedBuffer = this.device.createBuffer({
+      label: "Selected buffer",
+      size: selected.byteLength,
+      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC,
+    });
+
     let uniformArray = new Float32Array([
       // force and deltaTime
       0, 0, 0, 0,
@@ -253,7 +264,9 @@ export class RendererCPU {
       0, 0,
       0, 0, 0, 0, // sky color up
       0, 0, 0, 0, // sky color horizon
-      0, 0, 0, 0, // sun
+      0, 0, 0, // sun
+      0, // target index
+      // 0, 0, 0, 0,
     ]);
 
     this.uniformBuffer = this.device.createBuffer({
@@ -281,6 +294,11 @@ export class RendererCPU {
           visibility: GPUShaderStage.COMPUTE | GPUShaderStage.VERTEX,
           buffer: { type: "read-only-storage" as GPUBufferBindingType },
         },
+        {
+          binding: 2,
+          visibility: GPUShaderStage.COMPUTE | GPUShaderStage.VERTEX,
+          buffer: { type: "read-only-storage" as GPUBufferBindingType },
+        },
       ],
     });
   this.gaussianBindGroup = this.device.createBindGroup({
@@ -295,12 +313,73 @@ export class RendererCPU {
           binding: 1,
           resource: { buffer: this.gaussianBuffer },
         },
+        {
+          binding: 2,
+          resource: { buffer: this.selectedBuffer },
+        },
       ],
     });
 
     const pipelineLayout = this.device.createPipelineLayout({
       label: "Cell Pipeline Layout",
       bindGroupLayouts: [ gaussianBindGroupLayout ],
+    });
+
+    // this.selectedPipeline = this.device.createRenderPipeline({
+    //   label: "Gaussian pipeline",
+    //   layout: pipelineLayout,
+    //   vertex: {
+    //     module: gaussianShaderModule,
+    //     entryPoint: "vertexMain",
+    //     buffers: [vertexBufferLayout],
+    //   },
+    //   fragment: {
+    //     module: gaussianShaderModule,
+    //     entryPoint: "fragmentMain",
+    //     targets: [{
+    //       format: canvasFormat,
+    //       blend: {
+    //         color: {
+    //           operation: "add" as GPUBlendOperation,
+    //           srcFactor: "one-minus-dst-alpha" as GPUBlendFactor,
+    //           dstFactor: "one" as GPUBlendFactor,
+    //         },
+    //         alpha: {
+    //           operation: "add" as GPUBlendOperation,
+    //           srcFactor: "one-minus-dst-alpha" as GPUBlendFactor,
+    //           dstFactor: "one" as GPUBlendFactor,
+    //         },
+    //       },
+    //     }],
+    //   },
+    // });
+    this.selectedPipeline = this.device.createRenderPipeline({
+      label: "Selected pipeline",
+      layout: pipelineLayout,
+      vertex: {
+        module: gaussianShaderModule,
+        entryPoint: "vertexMain",
+        buffers: [vertexBufferLayout],
+      },
+      fragment: {
+        module: gaussianShaderModule,
+        entryPoint: "fragmentMain",
+        targets: [{
+          format: canvasFormat,
+          blend: {
+            color: {
+              operation: "add" as GPUBlendOperation,
+              srcFactor: "one-minus-dst-alpha" as GPUBlendFactor,
+              dstFactor: "one" as GPUBlendFactor,
+            },
+            alpha: {
+              operation: "add" as GPUBlendOperation,
+              srcFactor: "one-minus-dst-alpha" as GPUBlendFactor,
+              dstFactor: "one" as GPUBlendFactor,
+            },
+          },
+        }],
+      },
     });
 
     this.gaussianPipeline = this.device.createRenderPipeline({
@@ -399,12 +478,13 @@ export class RendererCPU {
     deltaTime: number,
     collect: boolean,
     build: boolean,
-    targetID: number | null,
+    targetIndex: number | null,
     renderMode: RenderMode,
     playMode: PlayMode,
     hour: number,
     playerGaussian: Float32Array,
     edits: Float32Array[],
+    selected: Float32Array,
   }) {
     const {
       look,
@@ -414,24 +494,26 @@ export class RendererCPU {
       deltaTime,
       collect,
       build,
-      targetID,
       renderMode,
       playMode,
       hour,
       playerGaussian,
       edits,
+      selected,
     } = options;
 
     if (
       !this.context ||
       !this.device ||
       !this.gaussianPipeline ||
+      !this.selectedPipeline ||
       !this.crosshairPipeline ||
       !this.skyPipeline ||
       !this.gaussianBindGroup ||
       !this.uniformBuffer ||
       !this.gaussianBuffer ||
-      !this.vertexBuffer
+      !this.vertexBuffer ||
+      !this.selectedBuffer
     ) {
       return;
     }
@@ -466,7 +548,7 @@ export class RendererCPU {
       playMode,
       ...skyGradient(hour),
       ...sun(hour),
-      targetID ?? -1,
+      0,
     ]);
 
     this.device.queue.writeBuffer(this.uniformBuffer, 0, uniformArray);
@@ -477,6 +559,11 @@ export class RendererCPU {
       const size = Math.min(GaussiansToGPUPerFrame, this.gaussiansToSend.length / G.Stride - this.gaussiansSent) * G.Stride;
       this.device.queue.writeBuffer(this.gaussianBuffer, offset*4, this.gaussiansToSend, offset, size);
       this.gaussiansSent += GaussiansToGPUPerFrame;
+    }
+
+    // Send selected gaussians
+    if (selected.length > 0) {
+      this.device.queue.writeBuffer(this.selectedBuffer, 0, selected);
     }
 
     if (!this.sorting && !this.merging) {
@@ -501,15 +588,47 @@ export class RendererCPU {
       this.simulationEdits = [];
     }
 
-    const encoder = this.device.createCommandEncoder();
+    let encoder = this.device.createCommandEncoder();
+
+    const gaussianColorAttachments = [{
+      view: this.context.getCurrentTexture().createView(),
+      clearValue: { r: 0, g: 0, b: 0, a: 0 },
+      loadOp: "clear" as GPULoadOp,
+      storeOp: "store" as GPUStoreOp,
+    }];
+
+    if (selected.length > 0) {
+      // Turn on select mode
+      uniformArray[uniformArray.length - 1] = 1;
+      this.device.queue.writeBuffer(this.uniformBuffer, 0, uniformArray);
+
+      const selectedPass = encoder.beginRenderPass({
+        colorAttachments: [{
+          view: this.context.getCurrentTexture().createView(),
+          clearValue: { r: 0, g: 0, b: 0, a: 0 },
+          loadOp: "clear" as GPULoadOp,
+          storeOp: "store" as GPUStoreOp,
+        }],
+      });
+      selectedPass.setPipeline(this.selectedPipeline);
+      selectedPass.setBindGroup(0, this.gaussianBindGroup);
+      selectedPass.setVertexBuffer(0, this.vertexBuffer);
+      selectedPass.draw(6, selected.length / G.Stride);
+      selectedPass.end();
+
+      // Finish the render pass before changing the uniforms
+      this.device.queue.submit([encoder.finish()]);
+      encoder = this.device.createCommandEncoder();
+
+      // Turn off select mode
+      uniformArray[uniformArray.length - 1] = 0;
+      this.device.queue.writeBuffer(this.uniformBuffer, 0, uniformArray);
+
+      gaussianColorAttachments[0].loadOp = "load" as GPULoadOp;
+    }
 
     const pass = encoder.beginRenderPass({
-      colorAttachments: [{
-        view: this.context.getCurrentTexture().createView(),
-        clearValue: { r: 0, g: 0, b: 0, a: 0 },
-        loadOp: "clear" as GPULoadOp,
-        storeOp: "store" as GPUStoreOp,
-      }],
+      colorAttachments: gaussianColorAttachments,
     });
     pass.setPipeline(this.gaussianPipeline);
     pass.setBindGroup(0, this.gaussianBindGroup);
