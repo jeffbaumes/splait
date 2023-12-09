@@ -45,9 +45,8 @@ const Movable = 1.;
 const Permeable = 2.;
 const Star = 3.;
 
-const StateNormal = 0.;
-const StateSelected = 1.;
-const StateInventory = 2.;
+const StateUsed = 0.;
+const StateFree = 1.;
 
 const RenderModeGaussian = 0.;
 const RenderModeFlat = 1.;
@@ -115,8 +114,8 @@ fn vertexMain(vertex: VertexInput) -> VertexOutput  {
     gaussian = selected[vertex.instance];
   }
 
-  // Don't draw objects that are in the inventory
-  if (gaussian.scaleAndState.w == StateInventory) {
+  // Don't draw objects that are free slots
+  if (gaussian.scaleAndState.w == StateFree) {
     output.viewportPos = vec4(0.0, 0.0, 2.0, 1.0);
     return output;
   }

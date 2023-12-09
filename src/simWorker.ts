@@ -1,16 +1,14 @@
 import { vec3 } from "gl-matrix";
 import { G, Material, State, Vec3 } from "./types";
-import { MaxSimulationDistance, collide } from "./sim";
+import { MaxSimulationDistance, collide, flattenArrays } from "./sim";
 
 let gaussians = new Float32Array();
 let eye: vec3 = [0., 0., 0.];
 
 const collideAll = (playerGaussian: Float32Array) => {
   let collisions = 0;
-  for (let idx = 0; idx < gaussians.length; idx += G.Stride) {
-    collisions += collide(gaussians, idx, gaussians, true);
-    collisions += collide(gaussians, idx, playerGaussian, false);
-  }
+  collisions += collide(gaussians, 0, gaussians.length, gaussians, true);
+  collisions += collide(gaussians, 0, gaussians.length, playerGaussian, false);
   return collisions;
 };
 
@@ -25,7 +23,7 @@ const simulate = ({deltaTime}: {deltaTime: number}) => {
       continue;
     }
 
-    if (material !== Material.Movable || state === State.Inventory) {
+    if (material !== Material.Movable || state === State.Free) {
       continue;
     }
 
@@ -72,11 +70,17 @@ onmessage = (e) => {
   } else if (e.data.type === 'simulate') {
     // console.time('simulate');
     // console.log(gaussians.length / G.Stride);
+    const edits = flattenArrays(e.data.edits);
+    const editsIdMap: {[id: number]: number} = {};
+    for (let i = 0; i < edits.length; i += G.Stride) {
+      editsIdMap[edits[i + G.ID]] = i;
+    }
     for (let i = 0; i < gaussians.length; i += G.Stride) {
       gaussians[i + G.Distance] = vec3.dist(eye, [gaussians[i + G.PosX], gaussians[i + G.PosY], gaussians[i + G.PosZ]]);
-      if (e.data.edits.map((d: Float32Array) => d[G.ID]).includes(gaussians[i + G.ID])) {
+      const editIndex = editsIdMap[gaussians[i + G.ID]];
+      if (editIndex !== undefined) {
         for (let j = 0; j < G.Stride; j += 1) {
-          gaussians[i + j] = e.data.edits.find((d: Float32Array) => d[G.ID] === gaussians[i + G.ID])[j];
+          gaussians[i + j] = edits[editIndex + j];
         }
       }
     }

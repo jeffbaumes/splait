@@ -2,7 +2,7 @@ import { quat, vec3 } from "gl-matrix";
 
 import { RendererCPU } from "./RendererCPU";
 import { G, Material, PlayMode, RenderMode, State, Vec3 } from "./types";
-import { collide, findTarget } from "./sim";
+import { collide, findTarget, generateSelection, selection } from "./sim";
 
 // const vecToString = (x: number[] | Float32Array | null, digits: number = 0) => {
 //   if (!x) {
@@ -227,7 +227,7 @@ export class Game {
       }
       this.playerGaussian[G.VelZ] = 0.8*desiredVelocity[2] + 0.2*this.playerGaussian[G.VelZ];
 
-      collide(this.playerGaussian, 0, this.renderer.gaussians, false);
+      collide(this.playerGaussian, 0, this.playerGaussian.length, this.renderer.gaussians, false);
 
       // Update position
       this.playerGaussian[G.PosX] += this.playerGaussian[G.VelX] * deltaTime;
@@ -245,19 +245,19 @@ export class Game {
         this.playerGaussian[G.PosZ],
       ];
 
-      const edits: Float32Array[] = [];
-      let selected = new Float32Array();
+      let edits = new Float32Array();
       const target = findTarget({eye, look: this.look, gaussians: this.renderer.gaussians});
-      if (target !== null) {
-        const targetGaussian = this.renderer.gaussians.slice(target, target + G.Stride);
-        selected = targetGaussian;
-        if (this.wantsToCollect) {
-          if (target !== null) {
-            targetGaussian[G.State] = State.Inventory;
-            edits.push(targetGaussian);
-            this.inventory.push(targetGaussian);
-          }
+      const numSelected = generateSelection({
+        anchor: target,
+        gaussians: this.renderer.gaussians,
+        size: this.selectDistance,
+      });
+      if (this.wantsToCollect) {
+        for (let g = 0; g < numSelected * G.Stride; g += G.Stride) {
+          selection[g + G.State] = State.Free;
+          // this.inventory.push(selection.slice(g, g + G.Stride));
         }
+        edits = selection.slice(0, numSelected * G.Stride);
       }
 
       // Time
@@ -279,7 +279,7 @@ export class Game {
         hour: this.hour,
         playerGaussian: this.playerGaussian,
         edits,
-        selected,
+        numSelected,
       });
       this.wantsToCollect = false;
       this.wantsToBuild = false;

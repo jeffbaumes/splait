@@ -1,5 +1,5 @@
 import { vec3 } from "gl-matrix";
-import { G } from "./types";
+import { G, State } from "./types";
 
 let eye: vec3 = [0., 0., 0.];
 let gaussians: Float32Array = new Float32Array();
@@ -40,7 +40,11 @@ const merge = (updates: Float32Array) => {
 
 const sort = () => {
   for (let i = 0; i < gaussians.length; i += G.Stride) {
-    gaussians[i + G.Distance] = vec3.dist(eye, [gaussians[i + G.PosX], gaussians[i + G.PosY], gaussians[i + G.PosZ]]);
+    if (gaussians[i + G.State] === State.Used) {
+      gaussians[i + G.Distance] = vec3.dist(eye, [gaussians[i + G.PosX], gaussians[i + G.PosY], gaussians[i + G.PosZ]]);
+    } else {
+      gaussians[i + G.Distance] = 1e99;
+    }
   }
   let indices = new Uint32Array(gaussians.length/G.Stride);
   for (let i = 0; i < indices.length; i += 1) {

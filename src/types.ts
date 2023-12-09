@@ -1,4 +1,6 @@
 
+export const MaxSelectedGaussians = 10000;
+
 export type NArray<A extends T[], T, N extends number> = A["length"] extends N ? A : NArray<[T, ...A], T, N>;
 
 export type Vec2 = NArray<[], number, 2>;
@@ -26,9 +28,8 @@ export enum Material {
 };
 
 export enum State {
-  Normal = 0.,
-  Selected = 1.,
-  Inventory = 2.,
+  Used = 0.,
+  Free = 1.,
 };
 
 // // Color rgba

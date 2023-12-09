@@ -1,11 +1,11 @@
 import { mat4, vec3 } from 'gl-matrix';
 
 import gaussianShaderCode from "./gaussiancpu.wgsl?raw";
-import { G, Mat4, PlayMode, RenderMode } from "./types";
+import { G, Mat4, MaxSelectedGaussians, PlayMode, RenderMode } from "./types";
 import { World } from "./World";
+import { selection } from './sim';
 
 const GaussiansToGPUPerFrame = 50000;
-const MaxSelectedGaussians = 10000;
 
 const polyInOut = (t: number, e: number) => {
   t *= 2;
@@ -49,7 +49,6 @@ export class RendererCPU {
   sortWorker: Worker;
   sorting = false;
   sortEye: vec3 = [0., 0., 0.];
-  sortEdits: Float32Array[] = [];
   simWorker: Worker;
   simulating = false;
   simulationDeltaTime = 0;
@@ -483,8 +482,8 @@ export class RendererCPU {
     playMode: PlayMode,
     hour: number,
     playerGaussian: Float32Array,
-    edits: Float32Array[],
-    selected: Float32Array,
+    edits: Float32Array,
+    numSelected: number,
   }) {
     const {
       look,
@@ -499,7 +498,7 @@ export class RendererCPU {
       hour,
       playerGaussian,
       edits,
-      selected,
+      numSelected,
     } = options;
 
     if (
@@ -562,8 +561,8 @@ export class RendererCPU {
     }
 
     // Send selected gaussians
-    if (selected.length > 0) {
-      this.device.queue.writeBuffer(this.selectedBuffer, 0, selected);
+    if (numSelected > 0) {
+      this.device.queue.writeBuffer(this.selectedBuffer, 0, selection, 0, numSelected * G.Stride);
     }
 
     if (!this.sorting && !this.merging) {
@@ -574,8 +573,9 @@ export class RendererCPU {
       this.sorting = true;
     }
     this.simulationDeltaTime += deltaTime;
-    this.simulationEdits.push(...edits);
-    this.sortEdits.push(...edits);
+    if (edits.length > 0) {
+      this.simulationEdits.push(edits);
+    }
     if (!this.simulating && !this.merging) {
       this.simWorker.postMessage({
         type: "simulate",
@@ -597,7 +597,7 @@ export class RendererCPU {
       storeOp: "store" as GPUStoreOp,
     }];
 
-    if (selected.length > 0) {
+    if (numSelected > 0) {
       // Turn on select mode
       uniformArray[uniformArray.length - 1] = 1;
       this.device.queue.writeBuffer(this.uniformBuffer, 0, uniformArray);
@@ -613,7 +613,7 @@ export class RendererCPU {
       selectedPass.setPipeline(this.selectedPipeline);
       selectedPass.setBindGroup(0, this.gaussianBindGroup);
       selectedPass.setVertexBuffer(0, this.vertexBuffer);
-      selectedPass.draw(6, selected.length / G.Stride);
+      selectedPass.draw(6, numSelected);
       selectedPass.end();
 
       // Finish the render pass before changing the uniforms

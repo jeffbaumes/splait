@@ -1,10 +1,9 @@
 # Todo
 
-- [ ] Take larger chunks of items
 - [ ] Redo place
+- [ ] Generate as you move around the world
 - [ ] Clouds
 - [ ] Rain, snow
-- [ ] Generate as you move around the world
 - [ ] Multiplayer
 - [ ] Don't allow particles to overlap, fill out space
 
@@ -15,6 +14,7 @@
 - [x] Player affects objects, can push them around (special gaussian that can is sent to sim each time)
 - [x] Redo take
 - [x] Better trees
+- [x] Take larger chunks of items
 
 # Maybe
 
