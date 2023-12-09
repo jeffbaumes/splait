@@ -48,7 +48,7 @@ export class Game {
   onGround = false;
   playMode = PlayMode.Fly;
   renderMode = RenderMode.Gaussian;
-  hour = 0;
+  hour = 12;
   secondsPerDay = 1*60;
   forward = vec3.fromValues(0, 0, -1);
   right = vec3.fromValues(1, 0, 0);
@@ -59,6 +59,7 @@ export class Game {
   renderer: RendererCPU;
   playerGaussian: Float32Array;
   inventory: Float32Array[] = [];
+  pauseTime = true;
 
   constructor(private canvas: HTMLCanvasElement) {
     if (!this.canvas) {
@@ -149,6 +150,8 @@ export class Game {
         const visible = debugDiv?.classList.contains('flex') || false;
         debugDiv?.classList.remove(visible ? 'flex' : 'hidden');
         debugDiv?.classList.add(visible ? 'hidden' : 'flex')
+      } else if (event.code === 'KeyT') {
+        this.pauseTime = !this.pauseTime;
       }
     });
 
@@ -253,7 +256,9 @@ export class Game {
       }
 
       // Time
-      this.hour += 24 * deltaTime / this.secondsPerDay;
+      if (!this.pauseTime) {
+        this.hour += 24 * deltaTime / this.secondsPerDay;
+      }
 
       this.renderer.render({
         look: this.look,
