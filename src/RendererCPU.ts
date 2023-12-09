@@ -1,5 +1,3 @@
-import { Recorder, RecorderStatus } from "canvas-record";
-import { AVC } from "media-codecs";
 import { mat4, vec3 } from 'gl-matrix';
 
 import gaussianShaderCode from "./gaussiancpu.wgsl?raw";
@@ -49,9 +47,11 @@ export class RendererCPU {
   sortWorker: Worker;
   sorting = false;
   sortEye: vec3 = [0., 0., 0.];
+  sortEdits: Float32Array[] = [];
   simWorker: Worker;
   simulating = false;
   simulationDeltaTime = 0;
+  simulationEdits: Float32Array[] = [];
   latestSimulateGaussians = new Float32Array();
   merging = false;
   gaussians: Float32Array = new Float32Array();
@@ -132,28 +132,6 @@ export class RendererCPU {
     this.context.configure({
       device: this.device,
       format: canvasFormat,
-    });
-
-    this.canvasRecorder = new Recorder(this.context, {
-      name: "canvas-record-example",
-      target: "in-browser",
-      duration: Infinity,
-      encoderOptions: {
-        codec: AVC.getCodec({ profile: "Main", level: "5.2" }),
-      },
-    });
-    const recordButton = document.querySelector<HTMLButtonElement>("#record");
-    if (!recordButton) {
-      throw new Error("No record button found.");
-    }
-    recordButton.addEventListener("click", () => {
-      if (this.canvasRecorder.status === RecorderStatus.Recording) {
-        this.canvasRecorder.stop();
-        recordButton.innerText = "Start recording";
-      } else {
-        this.canvasRecorder.start();
-        recordButton.innerText = "Stop recording";
-      }
     });
 
     const pixelSize = 1;
@@ -421,11 +399,28 @@ export class RendererCPU {
     deltaTime: number,
     collect: boolean,
     build: boolean,
+    targetID: number | null,
     renderMode: RenderMode,
     playMode: PlayMode,
     hour: number,
-  }){
-    const {look, up, eye, desiredVelocity, deltaTime, collect, build, renderMode, playMode, hour} = options;
+    playerGaussian: Float32Array,
+    edits: Float32Array[],
+  }) {
+    const {
+      look,
+      up,
+      eye,
+      desiredVelocity,
+      deltaTime,
+      collect,
+      build,
+      targetID,
+      renderMode,
+      playMode,
+      hour,
+      playerGaussian,
+      edits,
+    } = options;
 
     if (
       !this.context ||
@@ -470,7 +465,8 @@ export class RendererCPU {
       renderMode,
       playMode,
       ...skyGradient(hour),
-      ...sun(hour), 0,
+      ...sun(hour),
+      targetID ?? -1,
     ]);
 
     this.device.queue.writeBuffer(this.uniformBuffer, 0, uniformArray);
@@ -491,15 +487,18 @@ export class RendererCPU {
       this.sorting = true;
     }
     this.simulationDeltaTime += deltaTime;
+    this.simulationEdits.push(...edits);
+    this.sortEdits.push(...edits);
     if (!this.simulating && !this.merging) {
       this.simWorker.postMessage({
         type: "simulate",
         deltaTime: Math.min(this.simulationDeltaTime, 0.1),
-        desiredVelocity,
-        eye,
+        playerGaussian,
+        edits: this.simulationEdits,
       });
       this.simulating = true;
       this.simulationDeltaTime = 0;
+      this.simulationEdits = [];
     }
 
     const encoder = this.device.createCommandEncoder();
@@ -545,9 +544,5 @@ export class RendererCPU {
     crosshairPass.end();
 
     this.device.queue.submit([encoder.finish()]);
-
-    if (this.canvasRecorder.status === RecorderStatus.Recording) {
-      await this.canvasRecorder.step();
-    }
   }
 }

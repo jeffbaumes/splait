@@ -29,6 +29,7 @@ const merge = (updates: Float32Array) => {
       gaussians[i + G.VelX] = updates[updateIndex + G.VelX];
       gaussians[i + G.VelY] = updates[updateIndex + G.VelY];
       gaussians[i + G.VelZ] = updates[updateIndex + G.VelZ];
+      gaussians[i + G.State] = updates[updateIndex + G.State];
       gaussians[i + G.Distance] = distance;
     }
   }

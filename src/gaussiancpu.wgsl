@@ -3,6 +3,7 @@ struct Gaussian {
   centerAndDistance: vec4f,
   scaleAndState: vec4f,
   covA: vec3f,
+  id: f32,
   covB: vec3f,
   velocityAndMaterial: vec4f,
 };
@@ -32,6 +33,7 @@ struct Uniforms {
   playMode: f32,
   skyGradient: array<vec4f, 2>,
   sun: vec3f,
+  targetID: f32,
 };
 
 @group(0) @binding(0) var<uniform> uniforms: Uniforms;
@@ -119,16 +121,20 @@ fn vertexMain(vertex: VertexInput) -> VertexOutput  {
   output.pos = vertex.pos;
   if (gaussian.scaleAndState.w == StateSelected) {
     output.color = vec4f(1.0, 1.0, 0.0, gaussian.color.a);
-  } else if (abs(gaussian.centerAndDistance.w - MaxSimulationDistance) <= 1.0) {
+  // } else if (abs(gaussian.centerAndDistance.w - MaxSimulationDistance) <= 1.0) {
+  } else if (gaussian.centerAndDistance.w > MaxSimulationDistance) {
     var gray = vec3(0.299*gaussian.color.r + 0.587*gaussian.color.g + 0.114*gaussian.color.b);
-    var yellow = vec3(1.0, 1.0, 0.0);
-    output.color = vec4f(0.5*gaussian.color.rgb + 0.5*yellow, gaussian.color.a);
+    // var yellow = vec3(1.0, 1.0, 0.0);
+    // output.color = vec4f(0.5*gaussian.color.rgb + 0.5*yellow, gaussian.color.a);
+    output.color = vec4f(0.7*gaussian.color.rgb + 0.3*gray, gaussian.color.a);
   } else {
     output.color = gaussian.color;
   }
   var fogColor = uniforms.skyGradient[1];
   if (gaussian.velocityAndMaterial.w == Star) {
     output.color.a = gaussian.color.a * (1. - fogColor.a);
+  } else if (gaussian.id == uniforms.targetID) {
+    output.color = vec4(1., 1., 1., 1.);
   } else {
     // Fog
     var fog = 1. - exp(-gaussian.centerAndDistance.w / 10000.);

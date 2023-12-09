@@ -1,9 +1,8 @@
 import { quat, vec3 } from "gl-matrix";
 
-import { Renderer } from "./Renderer";
 import { RendererCPU } from "./RendererCPU";
-import { G, Material, PlayMode, RenderMode, Vec3 } from "./types";
-import { collide } from "./sim";
+import { G, Material, PlayMode, RenderMode, State, Vec3 } from "./types";
+import { collide, findTarget } from "./sim";
 
 // const vecToString = (x: number[] | Float32Array | null, digits: number = 0) => {
 //   if (!x) {
@@ -12,10 +11,10 @@ import { collide } from "./sim";
 //   return [...x].map(d => d.toLocaleString(undefined, {minimumFractionDigits: digits, maximumFractionDigits: digits})).join(', ');
 // };
 
-const getURLParameter = (name: string) => {
-  const url = new URL(window.location.href);
-  return url.searchParams.get(name);
-}
+// const getURLParameter = (name: string) => {
+//   const url = new URL(window.location.href);
+//   return url.searchParams.get(name);
+// }
 
 export class Game {
   keys = {
@@ -26,8 +25,8 @@ export class Game {
     Space: false,
     ShiftLeft: false,
   };
-  playerHeight = 1.75;
-  playerEyeHeight = 1.6;
+  playerHeight = 2;
+  playerEyeHeight = 4;
   playerCorner = 0.1;
   nudgeDistance = 0.01;
   playerWidth = 0.5;
@@ -57,21 +56,23 @@ export class Game {
   up = vec3.fromValues(0, 1, 0);
   pixelSize = 1;
   frame = '...............................................';
-  renderer: Renderer | RendererCPU;
+  renderer: RendererCPU;
   playerGaussian: Float32Array;
+  inventory: Float32Array[] = [];
 
   constructor(private canvas: HTMLCanvasElement) {
     if (!this.canvas) {
       throw 'Could not find canvas!';
     }
-    const sim = getURLParameter('sim');
-    this.renderer = sim === 'gpu' ? new Renderer(this.canvas) : new RendererCPU(this.canvas);
+    // const sim = getURLParameter('sim');
+    // this.renderer = sim === 'gpu' ? new Renderer(this.canvas) : new RendererCPU(this.canvas);
+    this.renderer = new RendererCPU(this.canvas);
     this.focus();
 
     this.playerGaussian = new Float32Array(this.renderer.world.createGaussian({
       position: [0, 0, 0],
       color: [0, 0, 0, 0],
-      scale: [this.playerWidth, this.playerHeight, this.playerWidth],
+      scale: [this.playerWidth / 2, this.playerHeight / 2, this.playerWidth / 2],
       material: Material.Player,
       q: quat.fromEuler([0, 0, 0, 0], 0, 0, 0),
     }));
@@ -231,20 +232,43 @@ export class Game {
         this.playerGaussian[G.VelY] += this.gravity * deltaTime;
       }
 
+      const eye: Vec3 = [
+        this.playerGaussian[G.PosX],
+        this.playerGaussian[G.PosY] - this.playerHeight / 2 + this.playerEyeHeight / 2,
+        this.playerGaussian[G.PosZ],
+      ];
+      const target = findTarget({eye, look: this.look, gaussians: this.renderer.gaussians});
+
+      const edits: Float32Array[] = [];
+      if (this.wantsToCollect) {
+        if (target !== null) {
+          const item = this.renderer.gaussians.slice(target, target + G.Stride);
+          item[G.State] = State.Inventory;
+          edits.push(item);
+          this.inventory.push(item);
+          // if (this.renderer.device && this.renderer.gaussianBuffer) {
+          //   this.renderer.device.queue.writeBuffer(this.renderer.gaussianBuffer, (target + G.State)*4, item, G.State, 4);
+          // }
+        }
+      }
+
       // Time
       this.hour += 24 * deltaTime / this.secondsPerDay;
 
       this.renderer.render({
         look: this.look,
         up: this.up,
-        eye: [this.playerGaussian[G.PosX], this.playerGaussian[G.PosY] + this.playerEyeHeight, this.playerGaussian[G.PosZ]],
+        eye,
         desiredVelocity,
         deltaTime,
         collect: this.wantsToCollect,
         build: this.wantsToBuild,
+        targetID: target === null ? null : this.renderer.gaussians[target + G.ID],
         renderMode: this.renderMode,
         playMode: this.playMode,
         hour: this.hour,
+        playerGaussian: this.playerGaussian,
+        edits,
       });
       this.wantsToCollect = false;
       this.wantsToBuild = false;

@@ -5,6 +5,7 @@ import { createNoise2D } from 'simplex-noise';
 import stars from './bsc5p_3d.json';
 
 import { Mat3, Material, Vec2, Vec3, Vec4 } from "./types";
+import { generateBranchStructure, getRandomTree } from "./tree";
 
 const randomPointInCircle = (center: vec2, radius: number): Vec2 => {
   const r = radius * Math.sqrt(Math.random());
@@ -84,9 +85,9 @@ export class World {
 
     // const generateDistance = 2;
     const generateDistance = 200;
-    const groundSpacing = 1.0;
+    const groundSpacing = 1;
     // const groundScale = 0.1;
-    const groundScale = 1.0;
+    const groundScale = 1;
     const groundHeight = (x: number, z: number) => {
       // return 0;
       // return noise2D(x / 1000, z / 1000) * 100;
@@ -101,6 +102,7 @@ export class World {
       f *= 2; x += 824;
       fbm += noise2D(x * f, z * f) * 0.065;
       return fbm*300;
+      // return 0;
     };
 
     const groundColor = (y: number) => {
@@ -175,7 +177,7 @@ export class World {
         1.5*height + groundHeight(x, z),
         z,
       ];
-      const scale: Vec3 = [0.1, height, 0.1];
+      const scale: Vec3 = [0.05, height, 0.05];
       const q = quat.fromEuler([0, 0, 0, 0], 20*(Math.random() - 0.5), 20*(Math.random() - 0.5), 0);
       gaussianList.push(this.createGaussian({position, color, scale, q, material: Material.Permeable}));
     }
@@ -206,38 +208,46 @@ export class World {
 
 
     // Trees
-    for (var i = 0; i < 10; i += 2) {
+    for (var i = 0; i < 100; i += 2) {
       const [x, z] = randomPointInCircle([0, 0], generateDistance);
       const p = [
         x,
         groundHeight(x, z),
         z,
       ];
-      // Trunk
-      for (let i = 0; i < 50; i += 2) {
-        const shade = 0.2 + Math.random()*0.5;
-        const width = .3 - 0.2*i/50;
-        p[0] += (Math.random() - 0.5)*width;
-        p[2] += (Math.random() - 0.5)*width;
-        gaussianList.push(this.createGaussian({
-          position: [p[0], p[1] + 0.25*i + 0.5, p[2]],
-          color: [shade*1.0, shade*0.5, shade*0.1, 1],
-          scale: [width, 0.3, width],
-          q,
-          material: Material.Movable,
-        }));
-      }
+      const tree = getRandomTree();
+      const branches = generateBranchStructure(tree);
+      for (const branch of branches) {
+        const branchSegmentSize = Math.max(Math.min(branch.radius * 4, 2), 1);
+        const q = quat.rotationTo(quat.create(), [0, 1, 0], branch.direction);
+        for (let d = 0; d < branch.length; d += branchSegmentSize) {
+          const shade = 0.2 + Math.random()*0.5;
+          const position: Vec3 = [
+            p[0] + d * branch.direction[0] + branch.start[0],
+            p[1] + d * branch.direction[1] + branch.start[1],
+            p[2] + d * branch.direction[2] + branch.start[2],
+          ];
+          const color: Vec4 = [shade*1.0, shade*0.5, shade*0.1, 1];
+          const curRadius = branch.radius;
+          // const offsetPercent = d / branch.length;
+          // const curRadius = (1 - offsetPercent) * branch.radius;
+          const scale: Vec3 = [curRadius, branchSegmentSize / 2, curRadius];
+          gaussianList.push(this.createGaussian({position, color, scale, q, material: Material.Immovable}));
 
-      // Leaves
-      for (let i = 0; i < 50; i++) {
-        const pos = randomPointInSphere([0, 0, 0], 1)
-        gaussianList.push(this.createGaussian({
-          position: [p[0] + 5*pos[0], p[1] + 15 + 5*pos[1], p[2] + 5*pos[2]],
-          color: [0.3 + 0.5*Math.random(), 0.2 + 0.6*Math.random(), 0.1*Math.random(), 1],
-          scale: [.5, .5, .5],
-          q,
-          material: Material.Movable,
-        }));
+          // Sometimes place a leaf
+          if (curRadius < 0.3 && Math.random() < 0.4) {
+            const pos = randomPointInSphere([0, 0, 0], 1.5)
+            const color: Vec4 = [0.1*Math.random(), 0.3 + 0.6*Math.random(), 0.1*Math.random(), 0.75];
+            // color: [0.3 + 0.5*Math.random(), 0.2 + 0.6*Math.random(), 0.1*Math.random(), 1],
+            gaussianList.push(this.createGaussian({
+              position: [position[0] + pos[0], position[1] + pos[1], position[2] + pos[2]],
+              color,
+              scale: [.5, .5, .5],
+              q,
+              material: Material.Immovable,
+            }));
+          }
+        }
       }
     }
 

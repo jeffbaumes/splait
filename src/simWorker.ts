@@ -5,10 +5,13 @@ import { MaxSimulationDistance, collide } from "./sim";
 let gaussians = new Float32Array();
 let eye: vec3 = [0., 0., 0.];
 
-const collideAll = () => {
+const collideAll = (playerGaussian: Float32Array) => {
+  let collisions = 0;
   for (let idx = 0; idx < gaussians.length; idx += G.Stride) {
-    collide(gaussians, idx, gaussians, true);
+    collisions += collide(gaussians, idx, gaussians, true);
+    collisions += collide(gaussians, idx, playerGaussian, false);
   }
+  return collisions;
 };
 
 const simulate = ({deltaTime}: {deltaTime: number}) => {
@@ -27,9 +30,16 @@ const simulate = ({deltaTime}: {deltaTime: number}) => {
     }
 
     // Enforce max velocity
-    // if (length(gaussiansOut[id.x].velocityAndMaterial.xyz) > 25.0) {
-    //   gaussiansOut[id.x].velocityAndMaterial = vec4(normalize(gaussiansOut[id.x].velocityAndMaterial.xyz) * 25.0, material);
-    // }
+    const speed = vec3.length([
+      gaussians[idx + G.VelX],
+      gaussians[idx + G.VelY],
+      gaussians[idx + G.VelZ],
+    ]);
+    if (speed > 25.0) {
+      gaussians[idx + G.VelX] *= 25.0 / speed;
+      gaussians[idx + G.VelY] *= 25.0 / speed;
+      gaussians[idx + G.VelZ] *= 25.0 / speed;
+    }
 
     // Update position
     gaussians[idx + G.PosX] = center[0] + deltaTime*gaussians[idx + G.VelX];
@@ -60,10 +70,18 @@ onmessage = (e) => {
     eye = e.data.eye;
     postMessage({type: 'merge'});
   } else if (e.data.type === 'simulate') {
+    // console.time('simulate');
+    // console.log(gaussians.length / G.Stride);
     for (let i = 0; i < gaussians.length; i += G.Stride) {
       gaussians[i + G.Distance] = vec3.dist(eye, [gaussians[i + G.PosX], gaussians[i + G.PosY], gaussians[i + G.PosZ]]);
+      if (e.data.edits.map((d: Float32Array) => d[G.ID]).includes(gaussians[i + G.ID])) {
+        for (let j = 0; j < G.Stride; j += 1) {
+          gaussians[i + j] = e.data.edits.find((d: Float32Array) => d[G.ID] === gaussians[i + G.ID])[j];
+        }
+      }
     }
-    collideAll();
+    collideAll(e.data.playerGaussian);
     simulate(e.data);
+    // console.timeEnd('simulate');
   }
 };

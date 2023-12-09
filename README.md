@@ -1,7 +1,7 @@
 # Todo
 
 - [x] Player physics
-- [ ] Keep world.gaussianList up to date for player physics and take/place
+- [x] Keep world.gaussianList up to date for player physics and take/place
 - [ ] Player affects objects, can push them around (special gaussian that can is sent to sim each time)
 - [ ] Redo take and place
 - [ ] Clouds
