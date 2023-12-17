@@ -47,7 +47,6 @@ const simulate = ({deltaTime}: {deltaTime: number}) => {
     // Gravity
     gaussians[idx + G.VelY] -= deltaTime * 25.0;
   }
-  postMessage({type: 'simulate', gaussians});
 }
 
 onmessage = (e) => {
@@ -86,6 +85,7 @@ onmessage = (e) => {
     }
     collideAll(e.data.playerGaussian);
     simulate(e.data);
+    postMessage({type: 'simulate', gaussians});
     // console.timeEnd('simulate');
   }
 };

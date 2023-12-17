@@ -47,7 +47,7 @@ export class Game {
   jumpVelocity = 25.0;
   gravity = -25.0;
   onGround = false;
-  playMode = PlayMode.Fly;
+  playMode = PlayMode.Normal;
   renderMode = RenderMode.Gaussian;
   hour = 12;
   secondsPerDay = 1*60;
@@ -258,6 +258,21 @@ export class Game {
           // this.inventory.push(selection.slice(g, g + G.Stride));
         }
         edits = selection.slice(0, numSelected * G.Stride);
+      } else if (target !== null && this.wantsToBuild) {
+        const build = this.renderer.world.createGaussian({
+          position: [
+            this.renderer.gaussians[target + G.PosX] - this.look[0],
+            this.renderer.gaussians[target + G.PosY] - this.look[1],
+            this.renderer.gaussians[target + G.PosZ] - this.look[2],
+          ],
+          color: [1, 1, 1, 1],
+          scale: [0.5, 0.5, 0.5],
+          material: Material.Immovable,
+          q: quat.fromEuler([0, 0, 0, 0], 0, 0, 0),
+        });
+        build[G.ID] = this.renderer.gaussians[this.renderer.freeIndex*G.Stride + G.ID];
+        this.renderer.freeIndex++;
+        edits = new Float32Array(build);
       }
 
       // Time

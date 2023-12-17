@@ -49,6 +49,8 @@ export class RendererCPU {
   sortWorker: Worker;
   sorting = false;
   sortEye: vec3 = [0., 0., 0.];
+  sortEdits: Float32Array[] = [];
+  freeIndex: number = 0;
   simWorker: Worker;
   simulating = false;
   simulationDeltaTime = 0;
@@ -77,7 +79,9 @@ export class RendererCPU {
           this.sortWorker.postMessage({
             type: "merge",
             gaussians: this.latestSimulateGaussians,
+            edits: this.sortEdits,
           });
+          this.sortEdits = [];
         }
       } else if (e.data.type === 'merge') {
         // this.device.queue.writeBuffer(this.gaussianBuffer, 0, e.data.gaussians);
@@ -89,6 +93,8 @@ export class RendererCPU {
           gaussians: e.data.gaussians.slice(0, e.data.maxDistanceIndex * G.Stride),
           eye: this.sortEye,
         });
+        console.log(e.data.freeIndex);
+        this.freeIndex = e.data.freeIndex;
       }
     };
 
@@ -107,7 +113,9 @@ export class RendererCPU {
           this.sortWorker.postMessage({
             type: "merge",
             gaussians: e.data.gaussians,
+            edits: this.sortEdits,
           });
+          this.sortEdits = [];
         }
         this.simulating = false;
       } else if (e.data.type === 'merge') {
@@ -575,6 +583,7 @@ export class RendererCPU {
     this.simulationDeltaTime += deltaTime;
     if (edits.length > 0) {
       this.simulationEdits.push(edits);
+      this.sortEdits.push(edits);
     }
     if (!this.simulating && !this.merging) {
       this.simWorker.postMessage({

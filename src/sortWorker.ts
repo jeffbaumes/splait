@@ -1,5 +1,6 @@
 import { vec3 } from "gl-matrix";
 import { G, State } from "./types";
+import { flattenArrays } from "./sim";
 
 let eye: vec3 = [0., 0., 0.];
 let gaussians: Float32Array = new Float32Array();
@@ -19,23 +20,23 @@ const merge = (updates: Float32Array) => {
     updateMap[updates[i + G.ID]] = i;
   }
 
+  let maxUsedIndex = -1;
   for (let i = 0; i < gaussians.length; i += G.Stride) {
     const updateIndex = updateMap[gaussians[i + G.ID]];
     if (updateIndex !== undefined) {
       const distance = vec3.dist(eye, [gaussians[i + G.PosX], gaussians[i + G.PosY], gaussians[i + G.PosZ]]);
-      gaussians[i + G.PosX] = updates[updateIndex + G.PosX];
-      gaussians[i + G.PosY] = updates[updateIndex + G.PosY];
-      gaussians[i + G.PosZ] = updates[updateIndex + G.PosZ];
-      gaussians[i + G.VelX] = updates[updateIndex + G.VelX];
-      gaussians[i + G.VelY] = updates[updateIndex + G.VelY];
-      gaussians[i + G.VelZ] = updates[updateIndex + G.VelZ];
-      gaussians[i + G.State] = updates[updateIndex + G.State];
+      for (let j = 0; j < G.Stride; j += 1) {
+        gaussians[i + j] = updates[updateIndex + j];
+      }
       gaussians[i + G.Distance] = distance;
+    }
+    if (gaussians[i + G.State] === State.Used && i > maxUsedIndex * G.Stride) {
+      maxUsedIndex = i / G.Stride;
     }
   }
 
   // postMessage({type: 'merge', gaussians}, {transfer: [gaussians.buffer]});
-  postMessage({type: 'merge', gaussians, maxDistanceIndex});
+  postMessage({type: 'merge', gaussians, maxDistanceIndex, freeIndex: maxUsedIndex + 1});
 };
 
 const sort = () => {
@@ -68,9 +69,11 @@ onmessage = (e) => {
   if (e.data.type === 'gaussians') {
     gaussians = e.data.gaussians;
   } else if (e.data.type === 'sort') {
+    console.timeEnd('not sorting');
     eye = e.data.eye;
     sort();
+    console.time('not sorting');
   } else if (e.data.type === 'merge') {
-    merge(e.data.gaussians);
+    merge(flattenArrays([...e.data.edits, e.data.gaussians]));
   }
 };

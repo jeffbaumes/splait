@@ -16,16 +16,19 @@ export const collide = (obj1arr: Float32Array, obj1Start: number, obj1End: numbe
   const vNorm = [0., 0., 0.] as Vec3;
   const vRelVelocity = [0., 0., 0.] as Vec3;
   for (let obj1ind = obj1Start; obj1ind < obj1End; obj1ind += G.Stride) {
+    if (obj1arr[obj1ind + G.State] === State.Free) {
+      continue;
+    }
+    const obj1mat = obj1arr[obj1ind + G.Material] as Material;
+    if (obj1mat !== Material.Movable && obj1mat !== Material.Player) {
+      continue;
+    }
     obj1pos[0] = obj1arr[obj1ind + G.PosX];
     obj1pos[1] = obj1arr[obj1ind + G.PosY];
     obj1pos[2] = obj1arr[obj1ind + G.PosZ];
     const obj1dist = obj1arr[obj1ind + G.Distance];
     if (obj1dist > MaxSimulationDistance) {
-      return 0;
-    }
-    const obj1mat = obj1arr[obj1ind + G.Material] as Material;
-    if (obj1mat !== Material.Movable && obj1mat !== Material.Player) {
-      return 0;
+      continue;
     }
     obj1vel[0] = obj1arr[obj1ind + G.VelX];
     obj1vel[1] = obj1arr[obj1ind + G.VelY];
@@ -34,11 +37,10 @@ export const collide = (obj1arr: Float32Array, obj1Start: number, obj1End: numbe
     obj1scale[1] = obj1arr[obj1ind + G.ScaleY];
     obj1scale[2] = obj1arr[obj1ind + G.ScaleZ];
     const obj1r = CollideSize*Math.max(obj1scale[0], obj1scale[1], obj1scale[2]);
-    const obj1state = obj1arr[obj1ind + G.State];
-    if (obj1state === State.Free) {
-      return 0;
-    }
     for (let obj2ind = 0; obj2ind < gaussians.length; obj2ind += G.Stride) {
+      if (gaussians[obj2ind + G.State] === State.Free) {
+        continue;
+      }
       if (obj1arr === gaussians && obj1ind === obj2ind) {
         continue;
       }
@@ -61,10 +63,6 @@ export const collide = (obj1arr: Float32Array, obj1Start: number, obj1End: numbe
       obj2scale[1] = gaussians[obj2ind + G.ScaleY];
       obj2scale[2] = gaussians[obj2ind + G.ScaleZ];
       const obj2r = CollideSize*Math.max(obj2scale[0], obj2scale[1], obj2scale[2]);
-      const obj2state = gaussians[obj2ind + G.State];
-      if (obj2state === State.Free) {
-        continue;
-      }
       let obj1mass = 0.01;
       let obj2mass = 0.01;
       if (obj2mat === Material.Immovable) {

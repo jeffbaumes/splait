@@ -4,7 +4,7 @@ import { createNoise2D } from 'simplex-noise';
 // https://github.com/frostoven/BSC5P-JSON-XYZ/tree/primary
 import stars from './bsc5p_3d.json';
 
-import { Mat3, Material, Vec2, Vec3, Vec4 } from "./types";
+import { Mat3, Material, State, Vec2, Vec3, Vec4 } from "./types";
 import { generateBranchStructure, getRandomTree } from "./tree";
 
 const randomPointInCircle = (center: vec2, radius: number): Vec2 => {
@@ -53,11 +53,15 @@ export class World {
     fbm += this.noise2D(x * f, z * f) * 0.125;
     f *= 2; x += 824;
     fbm += this.noise2D(x * f, z * f) * 0.065;
-    return fbm*300;
-    // return 0;
+    const height = 300 * fbm + 100;
+    // if (height / 150 + 2 < 0) {
+    //   return -300;
+    // }
+    return height;
   }
 
-  createGaussian({position, color, scale, q, material}: {position: vec3, color: vec4, scale: vec3, q: quat, material: Material}) {
+  createGaussian(options: {position: vec3, color: vec4, scale: vec3, q: quat, material: Material, state?: State}) {
+    let { position, color, scale, q, material, state } = options;
     let R = mat3.fromQuat(new Array(9) as Mat3, q);
     const M = [
       scale[0] * R[0],
@@ -89,7 +93,7 @@ export class World {
       // Position xyz and distance to camera
       ...(position as number[]), 0,
       // Size xyz and padding
-      ...(scale as number[]), 0,
+      ...(scale as number[]), state ?? State.Used,
       // Covariance matrix
       // 0  1  2  ID
       //    3  4
@@ -106,20 +110,20 @@ export class World {
     const gaussianList: number[][] = [];
 
     // const generateDistance = 2;
-    const generateDistance = 200;
+    const generateDistance = 100;
     const groundSpacing = 1;
     // const groundScale = 0.1;
     const groundScale = 1;
 
     const groundColor = (y: number) => {
-      y = y / 150 + 2;
       const colorAltitudes = [
-        {altitude: 0, color: [0.4, 0.8, 1.0]},
-        {altitude: 1, color: [0.4, 0.8, 0.4]},
-        {altitude: 2, color: [0.5, 0.7, 0.4]},
-        {altitude: 3, color: [0.8, 0.8, 0.5]},
-        {altitude: 4, color: [0.8, 0.8, 0.8]},
-        {altitude: 5, color: [1.0, 1.0, 1.0]},
+        {altitude: -50, color: [0.8, 0.8, 0.3]},
+        {altitude: 0, color: [1.0, 0.9, 0.6]},
+        {altitude: 20, color: [0.4, 0.8, 0.4]},
+        {altitude: 300, color: [0.5, 0.7, 0.4]},
+        {altitude: 450, color: [0.8, 0.8, 0.5]},
+        {altitude: 600, color: [0.8, 0.8, 0.8]},
+        {altitude: 750, color: [1.0, 1.0, 1.0]},
       ];
       for (let i = 0; i < colorAltitudes.length - 1; i++) {
         if (y < colorAltitudes[i].altitude) {
@@ -260,7 +264,7 @@ export class World {
     // Wider world
     const deltaAngle = 2*Math.PI/800;
     let scale = generateDistance*Math.tan(deltaAngle);
-    for (let d = generateDistance; d < 10000; d += 2*scale) {
+    for (let d = generateDistance; d < 1000; d += 2*scale) {
       scale = d*Math.tan(deltaAngle)/2;
       for (let ang = 0; ang < 2*Math.PI - deltaAngle/2; ang += deltaAngle) {
         const x = d*Math.cos(ang);
@@ -274,7 +278,25 @@ export class World {
           q,
           material: Material.Immovable,
         }));
+        if (y < 0) {
+          gaussianList.push(this.createGaussian({
+            position: [x, 0 - 2*scale, z],
+            color: [0.2, 0.4, 0.8, 0.25],
+            scale: [scale, scale, scale],
+            q,
+            material: Material.Immovable,
+          }));
+        }
       }
+    }
+
+    // Free slots
+    for (let i = 0; i < 50000; i++) {
+      const color: Vec4 = [0, 0, 0, 1];
+      const position: Vec3 = [1e10, 1e10, 1e10];
+      const scale: Vec3 = [0.5, 0.5, 0.5];
+      const q = quat.fromEuler([0, 0, 0, 0], 0, 0, 0);
+      gaussianList.push(this.createGaussian({position, color, scale, q, material: Material.Immovable, state: State.Free}));
     }
 
     this.gaussianList = gaussianList;

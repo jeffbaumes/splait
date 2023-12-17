@@ -124,7 +124,8 @@ fn vertexMain(vertex: VertexInput) -> VertexOutput  {
 
   output.pos = vertex.pos;
   if (uniforms.selectMode == 1.) {
-    output.color = vec4f(1.0, 1.0, 0.0, gaussian.color.a);
+    output.color = vec4f(1.0, 1.0, 0.0, 0.25 * gaussian.color.a);
+    return output;
   // } else if (abs(gaussian.centerAndDistance.w - MaxSimulationDistance) <= 1.0) {
   } else if (gaussian.centerAndDistance.w > MaxSimulationDistance) {
     var gray = vec3(0.299*gaussian.color.r + 0.587*gaussian.color.g + 0.114*gaussian.color.b);
