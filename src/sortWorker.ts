@@ -20,6 +20,7 @@ const merge = (updates: Float32Array) => {
     updateMap[updates[i + G.ID]] = i;
   }
 
+  // We need to update gaussians and sortedGaussians, since sortedGaussians will be transferred to the main thread
   let maxUsedIndex = -1;
   for (let i = 0; i < gaussians.length; i += G.Stride) {
     const updateIndex = updateMap[gaussians[i + G.ID]];
@@ -27,16 +28,24 @@ const merge = (updates: Float32Array) => {
       const distance = vec3.dist(eye, [gaussians[i + G.PosX], gaussians[i + G.PosY], gaussians[i + G.PosZ]]);
       for (let j = 0; j < G.Stride; j += 1) {
         gaussians[i + j] = updates[updateIndex + j];
+        sortedGaussians[i + j] = updates[updateIndex + j];
       }
       gaussians[i + G.Distance] = distance;
+      sortedGaussians[i + G.Distance] = distance;
     }
     if (gaussians[i + G.State] === State.Used && i > maxUsedIndex * G.Stride) {
       maxUsedIndex = i / G.Stride;
     }
   }
 
-  // postMessage({type: 'merge', gaussians}, {transfer: [gaussians.buffer]});
-  postMessage({type: 'merge', gaussians, maxDistanceIndex, freeIndex: maxUsedIndex + 1});
+  postMessage({
+    type: 'merge',
+    gaussians: sortedGaussians,
+    maxDistanceIndex,
+    freeIndex: maxUsedIndex + 1,
+  }, {
+    transfer: [sortedGaussians.buffer],
+  });
 };
 
 const sort = () => {
@@ -47,21 +56,27 @@ const sort = () => {
       gaussians[i + G.Distance] = 1e99;
     }
   }
-  let indices = new Uint32Array(gaussians.length/G.Stride);
+
+  const maxIndex = Math.pow(2, 32);
+  const quantizeScale = 1e5;
+  let indices = new Float64Array(gaussians.length/G.Stride);
   for (let i = 0; i < indices.length; i += 1) {
-    indices[i] = i*G.Stride;
+    indices[i] = Math.floor(Math.min(Math.log(gaussians[i*G.Stride + G.Distance]), 100)*quantizeScale) * maxIndex + i;
   }
-  indices.sort((a, b) => gaussians[a + G.Distance] - gaussians[b + G.Distance]);
+  indices.sort();
+  // Need to recreate sortedGaussians since it was transferred to the main thread in merge()
   sortedGaussians = new Float32Array(gaussians.length);
   for (let i = 0; i < indices.length; i += 1) {
-    const index = indices[i];
-    const outIndex = i*G.Stride;
-    for (let j = 0; j < G.Stride; j += 1) {
-      sortedGaussians[outIndex + j] = gaussians[index + j];
+    let index = (indices[i] % maxIndex)*G.Stride;
+    const endIndex = index + G.Stride;
+    let outIndex = i*G.Stride;
+    for (; index < endIndex; index += 1, outIndex += 1) {
+      sortedGaussians[outIndex] = gaussians[index];
     }
   }
 
-  gaussians = sortedGaussians;
+  // We want two copies so we can transfer one to the main thread
+  gaussians = sortedGaussians.slice();
   postMessage({type: 'sort', eye});
 };
 
@@ -69,10 +84,8 @@ onmessage = (e) => {
   if (e.data.type === 'gaussians') {
     gaussians = e.data.gaussians;
   } else if (e.data.type === 'sort') {
-    console.timeEnd('not sorting');
     eye = e.data.eye;
     sort();
-    console.time('not sorting');
   } else if (e.data.type === 'merge') {
     merge(flattenArrays([...e.data.edits, e.data.gaussians]));
   }

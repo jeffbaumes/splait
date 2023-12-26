@@ -26,9 +26,9 @@ const skyGradient = (hour: number) => {
   return [5/255,86/255,152/255, brightness, 181/255,210/255,219/255, brightness];
 };
 
-const sun = (hour: number) => {
-  return [Math.sin(hour / 24 * 2 * Math.PI), -Math.cos(hour / 24 * 2 * Math.PI), 0];
-};
+// const sun = (hour: number) => {
+//   return [Math.sin(hour / 24 * 2 * Math.PI), -Math.cos(hour / 24 * 2 * Math.PI), 0];
+// };
 
 export class RendererCPU {
   context: GPUCanvasContext | null = null;
@@ -271,8 +271,9 @@ export class RendererCPU {
       0, 0,
       0, 0, 0, 0, // sky color up
       0, 0, 0, 0, // sky color horizon
-      0, 0, 0, // sun
+      0, // hour
       0, // target index
+      0, 0,
       // 0, 0, 0, 0,
     ]);
 
@@ -554,7 +555,7 @@ export class RendererCPU {
       renderMode,
       playMode,
       ...skyGradient(hour),
-      ...sun(hour),
+      hour,
       0,
     ]);
 

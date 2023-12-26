@@ -255,6 +255,7 @@ export class World {
               scale: [.5, .5, .5],
               q,
               material: Material.Immovable,
+              // material: Material.Movable,
             }));
           }
         }
@@ -284,7 +285,8 @@ export class World {
             color: [0.2, 0.4, 0.8, 0.25],
             scale: [scale, scale, scale],
             q,
-            material: Material.Immovable,
+            material: Material.Permeable,
+            // material: Material.Movable,
           }));
         }
       }
