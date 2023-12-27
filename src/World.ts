@@ -236,7 +236,7 @@ export class World {
     // Wider world
     const deltaAngle = 2*Math.PI/800;
     let scale = generateDistance*Math.tan(deltaAngle);
-    for (let d = generateDistance; d < 10000; d += 2*scale) {
+    for (let d = generateDistance; d < 1000; d += 2*scale) {
       scale = d*Math.tan(deltaAngle)/2;
       for (let ang = 0; ang < 2*Math.PI - deltaAngle/2; ang += deltaAngle) {
         const x = d*Math.cos(ang);

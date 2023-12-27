@@ -57,19 +57,20 @@ const sort = () => {
     }
   }
 
-  const maxIndex = Math.pow(2, 32);
   const quantizeScale = 1e5;
-  let indices = new Float64Array(gaussians.length/G.Stride);
-  for (let i = 0; i < indices.length; i += 1) {
-    indices[i] = Math.floor(Math.min(Math.log(gaussians[i*G.Stride + G.Distance]), 100)*quantizeScale) * maxIndex + i;
+  let indices = new Uint32Array(2 * gaussians.length / G.Stride);
+  for (let i = 0; i < indices.length; i += 2) {
+    indices[i] = i / 2;
+    indices[i + 1] = Math.floor(Math.min(Math.log(gaussians[(i / 2)*G.Stride + G.Distance]), 100)*quantizeScale);
   }
-  indices.sort();
+  let bigIndices = new BigUint64Array(indices.buffer);
+  bigIndices.sort();
   // Need to recreate sortedGaussians since it was transferred to the main thread in merge()
   sortedGaussians = new Float32Array(gaussians.length);
-  for (let i = 0; i < indices.length; i += 1) {
-    let index = (indices[i] % maxIndex)*G.Stride;
+  for (let i = 0; i < indices.length; i += 2) {
+    let index = indices[i] * G.Stride;
     const endIndex = index + G.Stride;
-    let outIndex = i*G.Stride;
+    let outIndex = (i / 2)*G.Stride;
     for (; index < endIndex; index += 1, outIndex += 1) {
       sortedGaussians[outIndex] = gaussians[index];
     }
@@ -80,12 +81,18 @@ const sort = () => {
   postMessage({type: 'sort', eye});
 };
 
+let sortTime = 0;
+let sortCount = 0;
 onmessage = (e) => {
   if (e.data.type === 'gaussians') {
     gaussians = e.data.gaussians;
   } else if (e.data.type === 'sort') {
     eye = e.data.eye;
+    const start = performance.now();
     sort();
+    sortTime += performance.now() - start;
+    sortCount += 1;
+    console.log('sortTime', sortTime / sortCount);
   } else if (e.data.type === 'merge') {
     merge(flattenArrays([...e.data.edits, e.data.gaussians]));
   }
