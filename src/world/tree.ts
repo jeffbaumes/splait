@@ -1,5 +1,5 @@
 import { quat, vec3 } from "gl-matrix";
-import { Vec3 } from "./types";
+import { Vec3 } from "../types";
 
 enum TreeType {
   SugarMaple,

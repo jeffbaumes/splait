@@ -1,6 +1,6 @@
 import { vec3 } from "gl-matrix";
-import { G, Material, State, Vec3 } from "./types";
-import { MaxSimulationDistance, collide, flattenArrays } from "./sim";
+import { G, Material, State, Vec3 } from "../types";
+import { MaxSimulationDistance, collide, flattenArrays } from "../sim";
 
 let gaussians = new Float32Array();
 let eye: vec3 = [0., 0., 0.];

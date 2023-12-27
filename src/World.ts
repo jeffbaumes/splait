@@ -1,31 +1,12 @@
-import { mat3, quat, vec2, vec3, vec4 } from "gl-matrix";
+import { mat3, quat, vec3, vec4 } from "gl-matrix";
 import alea from 'alea';
 import { createNoise2D } from 'simplex-noise';
 // https://github.com/frostoven/BSC5P-JSON-XYZ/tree/primary
-import stars from './bsc5p_3d.json';
+import stars from './data/bsc5p_3d.json';
 
-import { Mat3, Material, State, Vec2, Vec3, Vec4 } from "./types";
-import { generateBranchStructure, getRandomTree } from "./tree";
-
-const randomPointInCircle = (center: vec2, radius: number): Vec2 => {
-  const r = radius * Math.sqrt(Math.random());
-  const theta = 2 * Math.PI * Math.random();
-  return [
-    center[0] + r * Math.cos(theta),
-    center[1] + r * Math.sin(theta),
-  ];
-};
-
-const randomPointInSphere = (center: vec3, radius: number): Vec3 => {
-  const r = radius * Math.pow(Math.random(), 1/3);
-  const theta = 2 * Math.PI * Math.random();
-  const phi = Math.acos(2 * Math.random() - 1);
-  return [
-    center[0] + r * Math.sin(phi) * Math.cos(theta),
-    center[1] + r * Math.sin(phi) * Math.sin(theta),
-    center[2] + r * Math.cos(phi),
-  ];
-};
+import { Mat3, Material, State, Vec3, Vec4 } from "./types";
+import { generateBranchStructure, getRandomTree } from "./world/tree";
+import { randomPointInCircle, randomPointInSphere } from "./world/generate";
 
 export class World {
 
@@ -146,15 +127,6 @@ export class World {
       return [1, 1, 1, 1] as Vec4;
     }
 
-    // Player
-    gaussianList.push(this.createGaussian({
-      position: [0, 50, 0],
-      color: [0.2, 0.2, 0.2, 0],
-      scale: [1, 1, 1],
-      q: quat.fromEuler([0, 0, 0, 0], 0, 0, 0),
-      material: Material.Movable,
-    }));
-
     const q = quat.fromEuler([0, 0, 0, 0], 0, 0, 0);
 
     // Stars
@@ -216,7 +188,6 @@ export class World {
       }
     }
 
-
     // Trees
     for (var i = 0; i < 100; i += 2) {
       const [x, z] = randomPointInCircle([0, 0], generateDistance);
@@ -265,7 +236,7 @@ export class World {
     // Wider world
     const deltaAngle = 2*Math.PI/800;
     let scale = generateDistance*Math.tan(deltaAngle);
-    for (let d = generateDistance; d < 1000; d += 2*scale) {
+    for (let d = generateDistance; d < 10000; d += 2*scale) {
       scale = d*Math.tan(deltaAngle)/2;
       for (let ang = 0; ang < 2*Math.PI - deltaAngle/2; ang += deltaAngle) {
         const x = d*Math.cos(ang);

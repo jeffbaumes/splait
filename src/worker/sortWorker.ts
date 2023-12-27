@@ -1,6 +1,6 @@
 import { vec3 } from "gl-matrix";
-import { G, State } from "./types";
-import { flattenArrays } from "./sim";
+import { G, State } from "../types";
+import { flattenArrays } from "../sim";
 
 let eye: vec3 = [0., 0., 0.];
 let gaussians: Float32Array = new Float32Array();

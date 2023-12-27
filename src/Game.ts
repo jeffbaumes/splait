@@ -1,6 +1,6 @@
 import { quat, vec3 } from "gl-matrix";
 
-import { RendererCPU } from "./RendererCPU";
+import { Renderer } from "./Renderer";
 import { G, Material, PlayMode, RenderMode, State, Vec3 } from "./types";
 import { collide, findTarget, generateSelection, selection } from "./sim";
 
@@ -57,7 +57,7 @@ export class Game {
   up = vec3.fromValues(0, 1, 0);
   pixelSize = 1;
   frame = '...............................................';
-  renderer: RendererCPU;
+  renderer: Renderer;
   playerGaussian: Float32Array;
   inventory: Float32Array[] = [];
   pauseTime = true;
@@ -66,9 +66,7 @@ export class Game {
     if (!this.canvas) {
       throw 'Could not find canvas!';
     }
-    // const sim = getURLParameter('sim');
-    // this.renderer = sim === 'gpu' ? new Renderer(this.canvas) : new RendererCPU(this.canvas);
-    this.renderer = new RendererCPU(this.canvas);
+    this.renderer = new Renderer(this.canvas);
     this.focus();
 
     this.playerGaussian = new Float32Array(this.renderer.world.createGaussian({
