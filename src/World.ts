@@ -225,8 +225,8 @@ export class World {
               color,
               scale: [.5, .5, .5],
               q,
-              material: Material.Immovable,
-              // material: Material.Movable,
+              // material: Material.Immovable,
+              material: Material.Movable,
             }));
           }
         }
