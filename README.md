@@ -1,6 +1,6 @@
 # Splait
 
-A Gaussian Splatted interactive world.
+A gaussian splatted interactive world.
 
 # Live demo
 
