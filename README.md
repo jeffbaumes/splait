@@ -1,3 +1,25 @@
+# Splait
+
+A Gaussian Splatted interactive world.
+
+# Live demo
+
+https://splait.pages.dev **Note: requires a browser with WebGPU support**
+
+# Features
+
+- Everything in the world is a gaussian
+- Player collides with gaussians
+- Walk near leaves to have them fall and collide with the ground and each other
+- Physics simulation is limited to a radius around the player
+- Scroll the mousewheel to change your brush size, highlighted in yellow
+- Left-click to destroy
+- Right-click to build (one white gaussian at a time)
+- Press T to turn on the day/night cycle
+- Press M to switch between flat and gaussian shading
+- Press P to switch between normal and fly mode
+- +/- keys change rendering resolution
+
 # Todo
 
 - [ ] Different brushes
