@@ -4,7 +4,13 @@ A Gaussian Splatted interactive world.
 
 # Live demo
 
-https://splait.pages.dev **Note: requires a browser with WebGPU support**
+https://splait.pages.dev
+
+**Note: requires a browser with WebGPU support**
+
+<img width="2010" alt="Screenshot 2025-02-19 at 7 44 30 PM" src="https://github.com/user-attachments/assets/2204a0c3-ef8d-44cb-8759-795bf87618da" />
+
+<img width="1707" alt="Screenshot 2025-02-19 at 8 02 18 PM" src="https://github.com/user-attachments/assets/e54ac592-8e7a-463f-b02e-babef3636d7e" />
 
 # Features
 
